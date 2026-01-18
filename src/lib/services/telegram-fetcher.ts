@@ -3,10 +3,11 @@
  *
  * Fetches messages from public Telegram channels using the web preview
  * at t.me/s/channelname (no API key required for public channels)
+ *
+ * Uses regex-based parsing for serverless compatibility (no jsdom)
  */
 
-import { query, queryOne, execute } from '@/lib/db';
-import { JSDOM } from 'jsdom';
+import { query, execute } from '@/lib/db';
 
 interface TelegramChannel {
   id: string;
@@ -56,7 +57,7 @@ class TelegramFetcherService {
         results.push(result);
 
         // Small delay between channels to be polite
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 500));
       } catch (error) {
         console.error(`Error fetching channel ${channel.channel_username}:`, error);
         results.push({
@@ -69,6 +70,29 @@ class TelegramFetcherService {
     }
 
     return results;
+  }
+
+  /**
+   * Fetch messages from a single channel (by username string)
+   */
+  async fetchChannelByUsername(username: string): Promise<FetchResult> {
+    const channel = await query<TelegramChannel>(
+      `SELECT id, channel_username, display_name, category, last_message_id
+       FROM telegram_channels
+       WHERE channel_username = $1 AND is_active = TRUE`,
+      [username]
+    );
+
+    if (channel.length === 0) {
+      return {
+        channel: username,
+        messages_fetched: 0,
+        new_messages: 0,
+        error: 'Channel not found in database',
+      };
+    }
+
+    return this.fetchChannel(channel[0]);
   }
 
   /**
@@ -90,7 +114,7 @@ class TelegramFetcherService {
     }
 
     const html = await response.text();
-    const messages = this.parseMessages(html);
+    const messages = this.parseMessages(html, channel.channel_username);
 
     // Filter to only new messages
     const lastMessageId = channel.last_message_id || 0;
@@ -129,7 +153,7 @@ class TelegramFetcherService {
     await execute(
       `UPDATE telegram_channels
        SET last_fetched_at = NOW(),
-           last_message_id = GREATEST(last_message_id, $2)
+           last_message_id = GREATEST(COALESCE(last_message_id, 0), $2)
        WHERE id = $1`,
       [channel.id, maxMessageId]
     );
@@ -142,61 +166,61 @@ class TelegramFetcherService {
   }
 
   /**
-   * Parse messages from Telegram web preview HTML
+   * Parse messages from Telegram web preview HTML using regex
+   * (serverless-friendly, no jsdom needed)
    */
-  private parseMessages(html: string): TelegramMessage[] {
-    const dom = new JSDOM(html);
-    const doc = dom.window.document;
+  private parseMessages(html: string, channelUsername: string): TelegramMessage[] {
     const messages: TelegramMessage[] = [];
 
-    const messageElements = doc.querySelectorAll('.tgme_widget_message');
+    // Match message blocks
+    const messageBlockRegex = /class="tgme_widget_message[^"]*"[^>]*data-post="([^"]+)"([\s\S]*?)(?=class="tgme_widget_message[^"]*"|$)/g;
+    let match;
 
-    for (const element of messageElements) {
+    while ((match = messageBlockRegex.exec(html)) !== null) {
       try {
-        // Get message ID from data attribute
-        const messageIdAttr = element.getAttribute('data-post');
-        if (!messageIdAttr) continue;
+        const dataPost = match[1]; // e.g., "channelname/1234"
+        const messageBlock = match[2];
 
-        const messageId = parseInt(messageIdAttr.split('/').pop() || '0');
+        // Extract message ID
+        const messageId = parseInt(dataPost.split('/').pop() || '0');
         if (!messageId) continue;
 
-        // Get content
-        const textElement = element.querySelector('.tgme_widget_message_text');
-        const content = textElement?.textContent?.trim() || '';
+        // Extract text content
+        const textMatch = messageBlock.match(/class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+        let content = '';
+        if (textMatch) {
+          // Strip HTML tags and decode entities
+          content = this.stripHtml(textMatch[1]);
+        }
 
-        // Get media
+        // Detect media type
         let mediaType = 'text';
         let mediaUrl: string | null = null;
 
-        const photoElement = element.querySelector('.tgme_widget_message_photo_wrap');
-        const videoElement = element.querySelector('.tgme_widget_message_video');
-        const documentElement = element.querySelector('.tgme_widget_message_document');
-
-        if (photoElement) {
+        if (messageBlock.includes('tgme_widget_message_photo')) {
           mediaType = 'photo';
-          const style = photoElement.getAttribute('style') || '';
-          const urlMatch = style.match(/url\(['"]?([^'"]+)['"]?\)/);
-          mediaUrl = urlMatch?.[1] || null;
-        } else if (videoElement) {
+          const photoMatch = messageBlock.match(/background-image:url\('([^']+)'\)/);
+          if (photoMatch) mediaUrl = photoMatch[1];
+        } else if (messageBlock.includes('tgme_widget_message_video')) {
           mediaType = 'video';
-          mediaUrl = videoElement.getAttribute('src') || null;
-        } else if (documentElement) {
+        } else if (messageBlock.includes('tgme_widget_message_document')) {
           mediaType = 'document';
         }
 
-        // Get views
-        const viewsElement = element.querySelector('.tgme_widget_message_views');
-        const viewsText = viewsElement?.textContent?.trim() || '0';
-        const views = this.parseViews(viewsText);
+        // Extract views
+        let views = 0;
+        const viewsMatch = messageBlock.match(/class="tgme_widget_message_views"[^>]*>([^<]+)/);
+        if (viewsMatch) {
+          views = this.parseViews(viewsMatch[1].trim());
+        }
 
-        // Get date
-        const dateElement = element.querySelector('.tgme_widget_message_date time');
-        const datetime = dateElement?.getAttribute('datetime') || new Date().toISOString();
-        const postedAt = new Date(datetime);
+        // Extract time
+        const timeMatch = messageBlock.match(/datetime="([^"]+)"/);
+        const postedAt = timeMatch ? new Date(timeMatch[1]) : new Date();
 
         messages.push({
           message_id: messageId,
-          content,
+          content: content.substring(0, 4000), // Limit content length
           media_type: mediaType,
           media_url: mediaUrl,
           views,
@@ -211,49 +235,51 @@ class TelegramFetcherService {
   }
 
   /**
-   * Parse views count (handles K, M suffixes)
+   * Strip HTML tags and decode common entities
    */
-  private parseViews(text: string): number {
-    const cleaned = text.replace(/[^0-9.KkMm]/g, '');
-    if (!cleaned) return 0;
+  private stripHtml(html: string): string {
+    return html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
 
-    if (cleaned.toLowerCase().includes('k')) {
+  /**
+   * Parse view count (handles K, M suffixes)
+   */
+  private parseViews(viewsStr: string): number {
+    const cleaned = viewsStr.toLowerCase().replace(/\s/g, '');
+    if (cleaned.endsWith('k')) {
       return Math.round(parseFloat(cleaned) * 1000);
-    }
-    if (cleaned.toLowerCase().includes('m')) {
+    } else if (cleaned.endsWith('m')) {
       return Math.round(parseFloat(cleaned) * 1000000);
     }
     return parseInt(cleaned) || 0;
   }
 
   /**
-   * Get recent messages across all channels
+   * Get recent messages from database
    */
-  async getRecentMessages(limit = 50): Promise<Array<{
-    channel_username: string;
-    channel_name: string;
-    category: string;
-    message_id: number;
+  async getRecentMessages(limit: number = 50): Promise<Array<{
+    id: string;
     content: string;
-    media_type: string;
-    views: number;
+    channel_username: string;
+    display_name: string;
     posted_at: string;
-    relevance_score: number | null;
+    category: string;
   }>> {
     return query(
-      `SELECT
-         c.channel_username,
-         COALESCE(c.display_name, c.channel_username) as channel_name,
-         c.category,
-         m.message_id,
-         m.content,
-         m.media_type,
-         m.views,
-         m.posted_at,
-         m.relevance_score
+      `SELECT m.id, m.content, c.channel_username, c.display_name, m.posted_at, c.category
        FROM telegram_messages m
        JOIN telegram_channels c ON m.channel_id = c.id
-       WHERE m.posted_at > NOW() - INTERVAL '24 hours'
+       WHERE m.posted_at > NOW() - INTERVAL '48 hours'
        ORDER BY m.posted_at DESC
        LIMIT $1`,
       [limit]
@@ -261,70 +287,53 @@ class TelegramFetcherService {
   }
 
   /**
-   * Search messages for keywords
+   * Search messages by keywords
    */
-  async searchMessages(keywords: string[], limit = 20): Promise<Array<{
-    channel_username: string;
+  async searchMessages(keywords: string[], limit: number = 50): Promise<Array<{
+    id: string;
     content: string;
+    channel_username: string;
+    display_name: string;
     posted_at: string;
-    views: number;
+    category: string;
   }>> {
-    const pattern = keywords.map(k => k.toLowerCase()).join('|');
-
+    const searchPattern = keywords.map(k => `%${k}%`).join(' ');
     return query(
-      `SELECT
-         c.channel_username,
-         m.content,
-         m.posted_at,
-         m.views
+      `SELECT m.id, m.content, c.channel_username, c.display_name, m.posted_at, c.category
        FROM telegram_messages m
        JOIN telegram_channels c ON m.channel_id = c.id
-       WHERE m.posted_at > NOW() - INTERVAL '48 hours'
-       AND LOWER(m.content) ~ $1
+       WHERE m.content ILIKE ANY($1::text[])
        ORDER BY m.posted_at DESC
        LIMIT $2`,
-      [pattern, limit]
+      [keywords.map(k => `%${k}%`), limit]
     );
   }
 
   /**
-   * Add a new channel to monitor
+   * Add a new channel
    */
-  async addChannel(username: string, displayName?: string, category = 'general'): Promise<{ success: boolean; error?: string }> {
-    const cleanUsername = username.replace('@', '').replace('https://t.me/', '').replace('https://t.me/s/', '');
-
-    // Verify channel exists
-    try {
-      const response = await fetch(`${this.BASE_URL}/${cleanUsername}`, {
-        headers: { 'User-Agent': this.USER_AGENT },
-      });
-
-      if (!response.ok) {
-        return { success: false, error: 'Channel not found or not public' };
-      }
-    } catch {
-      return { success: false, error: 'Failed to verify channel' };
-    }
-
+  async addChannel(
+    username: string,
+    displayName?: string,
+    category: string = 'other'
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       await execute(
-        `INSERT INTO telegram_channels (channel_username, display_name, category)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (channel_username) DO UPDATE
-         SET display_name = COALESCE($2, telegram_channels.display_name),
-             category = $3,
-             is_active = TRUE`,
-        [cleanUsername, displayName, category]
+        `INSERT INTO telegram_channels (channel_username, display_name, category, is_active)
+         VALUES ($1, $2, $3, TRUE)
+         ON CONFLICT (channel_username) DO UPDATE SET
+           display_name = COALESCE(EXCLUDED.display_name, telegram_channels.display_name),
+           is_active = TRUE`,
+        [username.replace('@', ''), displayName || username, category]
       );
-
       return { success: true };
     } catch (error) {
-      return { success: false, error: error instanceof Error ? error.message : 'Database error' };
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
 
   /**
-   * Get channel statistics
+   * Get statistics
    */
   async getStats(): Promise<{
     total_channels: number;
@@ -332,7 +341,7 @@ class TelegramFetcherService {
     total_messages: number;
     messages_24h: number;
   }> {
-    const stats = await queryOne<{
+    const stats = await query<{
       total_channels: string;
       active_channels: string;
       total_messages: string;
@@ -346,10 +355,10 @@ class TelegramFetcherService {
     `);
 
     return {
-      total_channels: parseInt(stats?.total_channels || '0'),
-      active_channels: parseInt(stats?.active_channels || '0'),
-      total_messages: parseInt(stats?.total_messages || '0'),
-      messages_24h: parseInt(stats?.messages_24h || '0'),
+      total_channels: parseInt(stats[0]?.total_channels || '0'),
+      active_channels: parseInt(stats[0]?.active_channels || '0'),
+      total_messages: parseInt(stats[0]?.total_messages || '0'),
+      messages_24h: parseInt(stats[0]?.messages_24h || '0'),
     };
   }
 }
