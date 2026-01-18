@@ -407,8 +407,8 @@ export async function processGeofenceUpdates(
       const dwellSeconds = Math.floor((Date.now() - enteredAt.getTime()) / 1000);
 
       if (dwellSeconds >= result.dwell_threshold_seconds) {
-        // Transition to dwelling
-        if (result.alert_on_dwell && existingState.state !== 'dwelling') {
+        // Transition to dwelling (only triggers once since state changes to 'dwelling')
+        if (result.alert_on_dwell) {
           stateChanges.push({
             type: 'dwell',
             geofence_id: result.geofence_id,
