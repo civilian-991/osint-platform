@@ -7,6 +7,7 @@ import type { PositionLatest, MilitaryCategory } from '@/lib/types/aircraft';
 import type { SSEConnectionStatus } from '@/hooks/useSSEPositions';
 import { getMilitaryCategoryColor, getMilitaryCategoryLabel } from '@/lib/utils/military-db';
 import { formatAltitude, formatSpeed } from '@/lib/utils/geo';
+import { fetchAircraftTrack, trackToCoordinates, type AircraftTrack } from '@/lib/api/tracks';
 import ConnectionStatus from './ConnectionStatus';
 
 interface AircraftMapProps {
@@ -93,6 +94,11 @@ export default function AircraftMap({
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
 
+  // Full track data for selected aircraft (from OpenSky API)
+  const [selectedTrack, setSelectedTrack] = useState<AircraftTrack | null>(null);
+  const [trackLoading, setTrackLoading] = useState(false);
+  const fetchedTrackId = useRef<string | null>(null);
+
   // Track position history for trails - load from localStorage on init
   const positionHistory = useRef<Map<string, TrailPoint[]>>(new Map());
   const trailsInitialized = useRef(false);
@@ -104,6 +110,37 @@ export default function AircraftMap({
       trailsInitialized.current = true;
     }
   }, []);
+
+  // Fetch full track when aircraft is selected
+  useEffect(() => {
+    if (!selectedAircraftId) {
+      setSelectedTrack(null);
+      fetchedTrackId.current = null;
+      return;
+    }
+
+    // Don't refetch if we already have this track
+    if (fetchedTrackId.current === selectedAircraftId) {
+      return;
+    }
+
+    const fetchTrack = async () => {
+      setTrackLoading(true);
+      try {
+        const track = await fetchAircraftTrack(selectedAircraftId);
+        if (track) {
+          setSelectedTrack(track);
+          fetchedTrackId.current = selectedAircraftId;
+        }
+      } catch (error) {
+        console.error('Failed to fetch track:', error);
+      } finally {
+        setTrackLoading(false);
+      }
+    };
+
+    fetchTrack();
+  }, [selectedAircraftId]);
 
   // Initialize map
   useEffect(() => {
@@ -306,7 +343,13 @@ export default function AircraftMap({
     // Build GeoJSON features for all trails
     const features: GeoJSON.Feature[] = [];
 
+    // Add trails for non-selected aircraft from local history
     positionHistory.current.forEach((trailPoints, icaoHex) => {
+      // Skip selected aircraft - we'll use full track for that
+      if (icaoHex.toUpperCase() === selectedAircraftId?.toUpperCase() && selectedTrack) {
+        return;
+      }
+
       if (trailPoints.length < 2) return;
 
       // Extract coordinates from trail points
@@ -315,7 +358,7 @@ export default function AircraftMap({
       const position = positions.find((p) => p.icao_hex === icaoHex);
       const category = position?.aircraft?.military_category as MilitaryCategory | null;
       const color = getMilitaryCategoryColor(category);
-      const isSelected = icaoHex === selectedAircraftId;
+      const isSelected = icaoHex.toUpperCase() === selectedAircraftId?.toUpperCase();
 
       features.push({
         type: 'Feature',
@@ -331,11 +374,34 @@ export default function AircraftMap({
       });
     });
 
+    // Add full track for selected aircraft (from OpenSky API)
+    if (selectedAircraftId && selectedTrack) {
+      const position = positions.find((p) => p.icao_hex.toUpperCase() === selectedAircraftId.toUpperCase());
+      const category = position?.aircraft?.military_category as MilitaryCategory | null;
+      const color = getMilitaryCategoryColor(category);
+      const coordinates = trackToCoordinates(selectedTrack);
+
+      if (coordinates.length >= 2) {
+        features.push({
+          type: 'Feature',
+          properties: {
+            icao_hex: selectedAircraftId,
+            color,
+            selected: true,
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates,
+          },
+        });
+      }
+    }
+
     source.setData({
       type: 'FeatureCollection',
       features,
     });
-  }, [positions, selectedAircraftId, mapLoaded]);
+  }, [positions, selectedAircraftId, selectedTrack, mapLoaded]);
 
   // Update markers and trails when positions change
   useEffect(() => {
