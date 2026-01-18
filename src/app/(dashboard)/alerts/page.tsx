@@ -20,6 +20,9 @@ const TYPE_LABELS: Record<AlertType, string> = {
   watchlist_aircraft: 'Watchlist Aircraft',
   breaking_news: 'Breaking News',
   region_activity: 'Region Activity',
+  geofence_entry: 'Geofence Entry',
+  geofence_exit: 'Geofence Exit',
+  geofence_dwell: 'Geofence Dwell',
 };
 
 export default function AlertsPage() {
