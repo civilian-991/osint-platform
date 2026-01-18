@@ -1,9 +1,9 @@
-import { stackServerApp } from "@/lib/auth/stack";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  // Get the user from Stack Auth
-  const user = await stackServerApp.getUser();
+  // Check for session cookie (Better Auth uses this cookie name)
+  const sessionCookie = request.cookies.get('better-auth.session_token');
+  const isAuthenticated = !!sessionCookie?.value;
 
   const isProtectedRoute =
     request.nextUrl.pathname === '/' ||
@@ -17,14 +17,14 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/signup');
 
   // Redirect to login if accessing protected route without auth
-  if (isProtectedRoute && !user) {
+  if (isProtectedRoute && !isAuthenticated) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
   // Redirect to dashboard if already logged in and accessing auth routes
-  if (isAuthRoute && user) {
+  if (isAuthRoute && isAuthenticated) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);
@@ -41,8 +41,8 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - api/cron (cron endpoints need their own auth)
-     * - handler (Stack Auth handler)
+     * - api/auth (auth API routes)
      */
-    '/((?!_next/static|_next/image|favicon.ico|api/cron|handler).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/cron|api/auth).*)',
   ],
 };

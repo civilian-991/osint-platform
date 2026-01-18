@@ -1,14 +1,29 @@
-import { redirect } from 'next/navigation';
-import { stackServerApp } from '@/lib/auth/stack';
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { auth } from '@/lib/auth/neon';
 import Link from 'next/link';
 import { Plane, Map, Newspaper, Link2, ArrowRight } from 'lucide-react';
 
-export default async function HomePage() {
-  const user = await stackServerApp.getUser();
+export default function HomePage() {
+  const router = useRouter();
+  const session = auth.useSession();
 
-  // If logged in, show dashboard (middleware will handle this, but double-check)
-  if (user) {
-    redirect('/aircraft');
+  useEffect(() => {
+    // If logged in, redirect to dashboard
+    if (session.data?.user) {
+      router.push('/aircraft');
+    }
+  }, [session.data, router]);
+
+  // Show loading while checking session
+  if (session.isPending) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
   }
 
   return (
@@ -112,44 +127,6 @@ export default async function HomePage() {
               </span>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* Data Sources */}
-      <section className="py-16 px-4 bg-muted/30">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-8">Data Sources</h2>
-          <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
-            <div className="bg-card border border-border rounded-lg p-6">
-              <h3 className="font-semibold text-lg mb-2">Aviation Data</h3>
-              <p className="text-muted-foreground">
-                Real-time aircraft positions from ADS-B receivers worldwide via ADSB.lol, with military aircraft identification and classification.
-              </p>
-            </div>
-            <div className="bg-card border border-border rounded-lg p-6">
-              <h3 className="font-semibold text-lg mb-2">News Intelligence</h3>
-              <p className="text-muted-foreground">
-                Automated news aggregation from GDELT covering major wire services, regional outlets, and social media sources.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-20 px-4">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to Start?</h2>
-          <p className="text-muted-foreground mb-8">
-            Create an account to access the full platform and start monitoring.
-          </p>
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-lg"
-          >
-            Get Started Free
-            <ArrowRight className="h-5 w-5" />
-          </Link>
         </div>
       </section>
 

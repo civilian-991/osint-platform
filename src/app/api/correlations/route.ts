@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { stackServerApp } from '@/lib/auth/stack';
+import { getServerSession } from '@/lib/auth/server';
 
 interface CorrelationWithRelations {
   id: string;
@@ -80,8 +80,9 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Get current user from Stack Auth for verification tracking
-    const user = await stackServerApp.getUser();
+    // Get current user from Neon Auth for verification tracking
+    const session = await getServerSession();
+    const user = session?.data?.user;
 
     const setClauses: string[] = ['updated_at = NOW()'];
     const params: (string | null)[] = [id];

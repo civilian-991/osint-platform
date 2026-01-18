@@ -1,7 +1,9 @@
+'use client';
+
 import { Suspense } from 'react';
 import Link from 'next/link';
-import { stackServerApp } from '@/lib/auth/stack';
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { auth } from '@/lib/auth/neon';
 import {
   Map,
   Plane,
@@ -11,16 +13,18 @@ import {
   LogOut,
 } from 'lucide-react';
 
-export default async function DashboardLayout({
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const user = await stackServerApp.getUser();
+  const router = useRouter();
+  const session = auth.useSession();
 
-  if (!user) {
-    redirect('/login');
-  }
+  const handleSignOut = async () => {
+    await auth.signOut();
+    router.push('/login');
+  };
 
   const navItems = [
     { href: '/', icon: Map, label: 'Map' },
@@ -29,6 +33,10 @@ export default async function DashboardLayout({
     { href: '/correlations', icon: Link2, label: 'Correlations' },
     { href: '/alerts', icon: Bell, label: 'Alerts' },
   ];
+
+  const user = session.data?.user;
+  const userInitial = (user?.email || user?.name || 'U')[0].toUpperCase();
+  const userDisplay = user?.name || user?.email || 'User';
 
   return (
     <div className="min-h-screen flex">
@@ -59,23 +67,21 @@ export default async function DashboardLayout({
           <div className="flex items-center gap-3 mb-3">
             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
               <span className="text-sm font-medium text-primary">
-                {(user.primaryEmail || user.displayName || 'U')[0].toUpperCase()}
+                {userInitial}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">
-                {user.displayName || user.primaryEmail || 'User'}
-              </p>
+              <p className="text-sm font-medium truncate">{userDisplay}</p>
             </div>
           </div>
 
-          <a
-            href="/handler/signout"
+          <button
+            onClick={handleSignOut}
             className="flex items-center gap-2 w-full px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
           >
             <LogOut className="h-4 w-4" />
             Sign out
-          </a>
+          </button>
         </div>
       </aside>
 

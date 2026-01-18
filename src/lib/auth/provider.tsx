@@ -1,14 +1,23 @@
-"use client";
+'use client';
 
-import { StackProvider, StackTheme } from "@stackframe/stack";
-import { stackServerApp } from "./stack";
+import { NeonAuthUIProvider } from '@neondatabase/auth/react/ui';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { auth } from './neon';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+
   return (
-    <StackProvider app={stackServerApp}>
-      <StackTheme>
-        {children}
-      </StackTheme>
-    </StackProvider>
+    <NeonAuthUIProvider
+      authClient={auth}
+      navigate={router.push}
+      replace={router.replace}
+      onSessionChange={() => router.refresh()}
+      redirectTo="/"
+      Link={Link}
+    >
+      {children}
+    </NeonAuthUIProvider>
   );
 }

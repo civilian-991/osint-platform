@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import { StackProvider, StackTheme } from "@stackframe/stack";
-import { stackServerApp } from "@/lib/auth/stack";
+import { AuthProvider } from '@/lib/auth/provider';
 import './globals.css';
+import '@neondatabase/auth/ui/css';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -19,11 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <StackProvider app={stackServerApp}>
-          <StackTheme>
-            {children}
-          </StackTheme>
-        </StackProvider>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

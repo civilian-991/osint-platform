@@ -1,4 +1,6 @@
-import { SignUp } from "@stackframe/stack";
+'use client';
+
+import { AuthView } from '@neondatabase/auth/react/ui';
 import { Plane } from 'lucide-react';
 import Link from 'next/link';
 
@@ -13,9 +15,7 @@ export default function SignupPage() {
             <span className="text-2xl font-bold">OSINT Aviation</span>
           </div>
 
-          <h1 className="text-2xl font-semibold text-center mb-6">Create an account</h1>
-
-          <SignUp />
+          <AuthView path="sign-up" />
 
           {/* Sign in link */}
           <p className="mt-6 text-center text-sm text-muted-foreground">
