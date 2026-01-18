@@ -555,6 +555,11 @@ export default function AircraftMap({
       <div className="absolute top-4 left-4 glass rounded-lg px-3 py-2 text-sm">
         <span className="font-semibold text-primary">{positions.length}</span>{' '}
         <span className="text-muted-foreground">aircraft tracked</span>
+        {positions.length > 0 && (
+          <div className="text-xs text-muted-foreground/70 mt-0.5">
+            {positions.filter(p => p.aircraft?.is_military).length} military, {positions.filter(p => !p.aircraft?.is_military).length} civilian
+          </div>
+        )}
       </div>
 
       {/* Connection status */}

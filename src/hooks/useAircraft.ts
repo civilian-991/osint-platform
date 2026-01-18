@@ -8,6 +8,7 @@ interface UseAircraftOptions {
   live?: boolean;
   refreshInterval?: number;
   military?: boolean;
+  all?: boolean; // Fetch all aircraft (military + civilian) like ADSBexchange
 }
 
 interface UseAircraftReturn {
@@ -18,7 +19,7 @@ interface UseAircraftReturn {
 }
 
 export function useAircraft(options: UseAircraftOptions = {}): UseAircraftReturn {
-  const { live = false, refreshInterval = 30000, military = true } = options;
+  const { live = false, refreshInterval = 30000, military = true, all = false } = options;
 
   const [positions, setPositions] = useState<PositionLatest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,7 +29,12 @@ export function useAircraft(options: UseAircraftOptions = {}): UseAircraftReturn
     try {
       const params = new URLSearchParams();
       if (live) params.set('live', 'true');
-      if (military) params.set('military', 'true');
+      if (all) {
+        params.set('all', 'true');
+        params.set('military', 'false'); // When all=true, show all aircraft
+      } else if (military) {
+        params.set('military', 'true');
+      }
 
       const response = await fetch(`/api/aircraft?${params.toString()}`);
 
@@ -107,7 +113,7 @@ export function useAircraft(options: UseAircraftOptions = {}): UseAircraftReturn
     } finally {
       setLoading(false);
     }
-  }, [live, military]);
+  }, [live, military, all]);
 
   // Initial fetch
   useEffect(() => {

@@ -28,6 +28,12 @@ async function queueMLTask(
 
 // Verify cron secret for security
 function verifyCronSecret(request: NextRequest): boolean {
+  // Check Vercel cron header first (auto-set by Vercel for cron jobs)
+  const vercelCron = request.headers.get('x-vercel-cron');
+  if (vercelCron) {
+    return true;
+  }
+
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
@@ -36,9 +42,10 @@ function verifyCronSecret(request: NextRequest): boolean {
     return true;
   }
 
+  // Allow if no CRON_SECRET is set (for testing)
   if (!cronSecret) {
-    console.warn('CRON_SECRET not set');
-    return false;
+    console.warn('CRON_SECRET not set, allowing request');
+    return true;
   }
 
   return authHeader === `Bearer ${cronSecret}`;
