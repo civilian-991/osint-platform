@@ -116,19 +116,29 @@ class TelegramFetcherService {
     const html = await response.text();
     const messages = this.parseMessages(html, channel.channel_username);
 
+    // Debug: Log parsed content
+    console.log(`[Telegram] Parsed ${messages.length} messages from ${channel.channel_username}`);
+    if (messages.length > 0) {
+      const withContent = messages.filter(m => m.content && m.content.length > 0);
+      console.log(`[Telegram] ${withContent.length} messages have content. IDs: ${messages.map(m => m.message_id).join(',')}. Sample:`, withContent[0]?.content?.substring(0, 50));
+    }
+
     // Filter to only new messages
     const lastMessageId = channel.last_message_id || 0;
     const newMessages = messages.filter(m => m.message_id > lastMessageId);
 
-    // Store new messages
+    // Store ALL messages (update content for existing ones that may be empty)
     let insertedCount = 0;
-    for (const message of newMessages) {
+    for (const message of messages) {
       try {
         await execute(
           `INSERT INTO telegram_messages
            (channel_id, message_id, content, media_type, media_url, views, posted_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (channel_id, message_id) DO NOTHING`,
+           ON CONFLICT (channel_id, message_id) DO UPDATE SET
+             content = COALESCE(NULLIF(EXCLUDED.content, ''), telegram_messages.content, ''),
+             media_type = EXCLUDED.media_type,
+             views = EXCLUDED.views`,
           [
             channel.id,
             message.message_id,
@@ -161,7 +171,7 @@ class TelegramFetcherService {
     return {
       channel: channel.channel_username,
       messages_fetched: messages.length,
-      new_messages: insertedCount,
+      new_messages: newMessages.length,
     };
   }
 
@@ -172,66 +182,113 @@ class TelegramFetcherService {
   private parseMessages(html: string, channelUsername: string): TelegramMessage[] {
     const messages: TelegramMessage[] = [];
 
-    // Match message blocks
-    const messageBlockRegex = /class="tgme_widget_message[^"]*"[^>]*data-post="([^"]+)"([\s\S]*?)(?=class="tgme_widget_message[^"]*"|$)/g;
+    // Match message blocks - find each message wrap div with its content
+    // The structure is: <div class="tgme_widget_message_wrap">...<div class="tgme_widget_message" data-post="...">...</div></div>
+    const messageBlockRegex = /<div[^>]*class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div><\/div><div class="tgme_widget_message_wrap/g;
+    const lastBlockRegex = /<div[^>]*class="tgme_widget_message_wrap[^"]*"[^>]*>([\s\S]*?)<\/div><\/div><\/section>/;
+
+    // Process all messages except the last one
     let match;
-
     while ((match = messageBlockRegex.exec(html)) !== null) {
-      try {
-        const dataPost = match[1]; // e.g., "channelname/1234"
-        const messageBlock = match[2];
+      const parsed = this.parseMessageBlock(match[1], channelUsername);
+      if (parsed) messages.push(parsed);
+    }
 
-        // Extract message ID
-        const messageId = parseInt(dataPost.split('/').pop() || '0');
-        if (!messageId) continue;
+    // Process the last message
+    const lastMatch = html.match(lastBlockRegex);
+    if (lastMatch) {
+      const parsed = this.parseMessageBlock(lastMatch[1], channelUsername);
+      if (parsed) messages.push(parsed);
+    }
 
-        // Extract text content
-        const textMatch = messageBlock.match(/class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
-        let content = '';
-        if (textMatch) {
-          // Strip HTML tags and decode entities
-          content = this.stripHtml(textMatch[1]);
+    // If the above didn't work, try alternative parsing
+    if (messages.length === 0) {
+      // Find all data-post attributes and extract content around them
+      const altRegex = /data-post="([^"]+)"[\s\S]*?<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>[\s\S]*?datetime="([^"]+)"[\s\S]*?class="tgme_widget_message_views"[^>]*>([^<]*)/g;
+
+      while ((match = altRegex.exec(html)) !== null) {
+        try {
+          const dataPost = match[1];
+          const textContent = match[2];
+          const datetime = match[3];
+          const viewsStr = match[4];
+
+          const messageId = parseInt(dataPost.split('/').pop() || '0');
+          if (!messageId) continue;
+
+          messages.push({
+            message_id: messageId,
+            content: this.stripHtml(textContent).substring(0, 4000),
+            media_type: 'text',
+            media_url: null,
+            views: this.parseViews(viewsStr.trim()),
+            posted_at: new Date(datetime),
+          });
+        } catch (error) {
+          console.error('Error in alt parsing:', error);
         }
-
-        // Detect media type
-        let mediaType = 'text';
-        let mediaUrl: string | null = null;
-
-        if (messageBlock.includes('tgme_widget_message_photo')) {
-          mediaType = 'photo';
-          const photoMatch = messageBlock.match(/background-image:url\('([^']+)'\)/);
-          if (photoMatch) mediaUrl = photoMatch[1];
-        } else if (messageBlock.includes('tgme_widget_message_video')) {
-          mediaType = 'video';
-        } else if (messageBlock.includes('tgme_widget_message_document')) {
-          mediaType = 'document';
-        }
-
-        // Extract views
-        let views = 0;
-        const viewsMatch = messageBlock.match(/class="tgme_widget_message_views"[^>]*>([^<]+)/);
-        if (viewsMatch) {
-          views = this.parseViews(viewsMatch[1].trim());
-        }
-
-        // Extract time
-        const timeMatch = messageBlock.match(/datetime="([^"]+)"/);
-        const postedAt = timeMatch ? new Date(timeMatch[1]) : new Date();
-
-        messages.push({
-          message_id: messageId,
-          content: content.substring(0, 4000), // Limit content length
-          media_type: mediaType,
-          media_url: mediaUrl,
-          views,
-          posted_at: postedAt,
-        });
-      } catch (error) {
-        console.error('Error parsing message:', error);
       }
     }
 
     return messages;
+  }
+
+  /**
+   * Parse a single message block
+   */
+  private parseMessageBlock(blockHtml: string, channelUsername: string): TelegramMessage | null {
+    try {
+      // Extract data-post
+      const dataPostMatch = blockHtml.match(/data-post="([^"]+)"/);
+      if (!dataPostMatch) return null;
+
+      const messageId = parseInt(dataPostMatch[1].split('/').pop() || '0');
+      if (!messageId) return null;
+
+      // Extract text content - look for the message text div
+      let content = '';
+      const textMatch = blockHtml.match(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+      if (textMatch) {
+        content = this.stripHtml(textMatch[1]);
+      }
+
+      // Detect media type
+      let mediaType = 'text';
+      let mediaUrl: string | null = null;
+
+      if (blockHtml.includes('tgme_widget_message_photo')) {
+        mediaType = 'photo';
+        const photoMatch = blockHtml.match(/background-image:url\('([^']+)'\)/);
+        if (photoMatch) mediaUrl = photoMatch[1];
+      } else if (blockHtml.includes('tgme_widget_message_video')) {
+        mediaType = 'video';
+      } else if (blockHtml.includes('tgme_widget_message_document')) {
+        mediaType = 'document';
+      }
+
+      // Extract views
+      let views = 0;
+      const viewsMatch = blockHtml.match(/class="tgme_widget_message_views"[^>]*>([^<]+)/);
+      if (viewsMatch) {
+        views = this.parseViews(viewsMatch[1].trim());
+      }
+
+      // Extract time
+      const timeMatch = blockHtml.match(/datetime="([^"]+)"/);
+      const postedAt = timeMatch ? new Date(timeMatch[1]) : new Date();
+
+      return {
+        message_id: messageId,
+        content: content.substring(0, 4000),
+        media_type: mediaType,
+        media_url: mediaUrl,
+        views,
+        posted_at: postedAt,
+      };
+    } catch (error) {
+      console.error('Error parsing message block:', error);
+      return null;
+    }
   }
 
   /**
