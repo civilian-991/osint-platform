@@ -66,6 +66,15 @@ const REGION_BOUNDS = {
   maxLon: 63,
 };
 
+// High-interest areas for focused fetching (smaller boxes = more detail)
+const FOCUS_AREAS = [
+  { name: 'Lebanon-Israel', lat: 33.5, lon: 35.5, radius: 150 },
+  { name: 'Persian Gulf', lat: 27, lon: 51, radius: 200 },
+  { name: 'Iran', lat: 32, lon: 53, radius: 300 },
+  { name: 'Syria', lat: 35, lon: 38, radius: 150 },
+  { name: 'Red Sea', lat: 20, lon: 38, radius: 200 },
+];
+
 class MultiSourceADSBService {
   private sources: DataSource[];
   private cache: Map<string, { data: ADSBAircraft; timestamp: number; source: string }> = new Map();
@@ -82,6 +91,7 @@ class MultiSourceADSBService {
     const allAircraft = new Map<string, ADSBAircraft>();
     const fetchPromises: Promise<{ source: string; aircraft: ADSBAircraft[] }>[] = [];
 
+    // Fetch from military endpoints
     for (const source of this.sources) {
       if (!source.militaryEndpoint) continue;
 
@@ -93,6 +103,21 @@ class MultiSourceADSBService {
             return { source: source.name, aircraft: [] };
           })
       );
+    }
+
+    // Also fetch from focus areas to catch Mode S only aircraft
+    for (const area of FOCUS_AREAS) {
+      const source = this.sources[0]; // Use primary source for area queries
+      if (source) {
+        fetchPromises.push(
+          this.fetchFromSource(source, `/point/${area.lat}/${area.lon}/${area.radius}`)
+            .then(aircraft => ({ source: `${source.name}-${area.name}`, aircraft }))
+            .catch(err => {
+              console.error(`Error fetching ${area.name}:`, err.message);
+              return { source: source.name, aircraft: [] };
+            })
+        );
+      }
     }
 
     const results = await Promise.allSettled(fetchPromises);
@@ -117,8 +142,7 @@ class MultiSourceADSBService {
       }
     }
 
-    // Also try to detect military from non-military endpoints
-    // Some sources don't have a dedicated military endpoint
+    // Detect military from all aircraft (including non-flagged ones)
     await this.enrichWithMilitaryDetection(allAircraft);
 
     return Array.from(allAircraft.values());
