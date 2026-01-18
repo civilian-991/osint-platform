@@ -13,6 +13,7 @@ import ConnectionStatus from './ConnectionStatus';
 interface AircraftMapProps {
   positions: PositionLatest[];
   onAircraftClick?: (aircraft: PositionLatest) => void;
+  onMapClick?: () => void;
   selectedAircraftId?: string;
   showRegions?: boolean;
   connectionStatus?: SSEConnectionStatus;
@@ -83,6 +84,7 @@ function saveTrailsToStorage(trails: Map<string, TrailPoint[]>) {
 export default function AircraftMap({
   positions,
   onAircraftClick,
+  onMapClick,
   selectedAircraftId,
   showRegions = true,
   connectionStatus,
@@ -176,6 +178,17 @@ export default function AircraftMap({
       // Initialize trails source and layer
       if (map.current) {
         initializeTrailsLayer(map.current);
+      }
+    });
+
+    // Click on map background to deselect aircraft
+    map.current.on('click', (e) => {
+      // Check if click was on a marker by checking the target
+      const target = e.originalEvent.target as HTMLElement;
+      const isMarkerClick = target.closest('.aircraft-marker');
+
+      if (!isMarkerClick && onMapClick) {
+        onMapClick();
       }
     });
 

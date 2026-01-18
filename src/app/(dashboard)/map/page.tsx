@@ -41,6 +41,10 @@ export default function MapPage() {
     setSelectedAircraft(aircraft);
   };
 
+  const handleMapClick = () => {
+    setSelectedAircraft(null);
+  };
+
   return (
     <div className="flex-1 flex h-screen">
       {/* Map */}
@@ -48,6 +52,7 @@ export default function MapPage() {
         <AircraftMap
           positions={positions}
           onAircraftClick={handleAircraftClick}
+          onMapClick={handleMapClick}
           selectedAircraftId={selectedAircraft?.icao_hex}
           showRegions={true}
         />
