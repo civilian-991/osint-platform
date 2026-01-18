@@ -9,7 +9,7 @@ export function createServerAuthClient() {
 // Get session from cookies for server-side use
 export async function getServerSession() {
   const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('better-auth.session_token');
+  const sessionCookie = cookieStore.get('__Secure-neon-auth.session_token');
 
   if (!sessionCookie?.value) {
     return null;
