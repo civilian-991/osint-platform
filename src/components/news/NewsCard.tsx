@@ -49,7 +49,7 @@ export default function NewsCard({
   try {
     domain = new URL(news.url).hostname.replace('www.', '');
   } catch {
-    domain = isTelegram ? 't.me' : news.source_domain || 'unknown';
+    domain = isTelegram ? 't.me' : extendedNews.source_domain || 'unknown';
   }
 
   // Get credibility color for accent
@@ -86,7 +86,7 @@ export default function NewsCard({
                 'text-xs font-medium truncate',
                 isTelegram ? 'text-cyan-400' : 'text-muted-foreground'
               )}>
-                {news.source_name || domain}
+                {extendedNews.source_name || domain}
               </span>
               {extendedNews._views && (
                 <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground/60">
