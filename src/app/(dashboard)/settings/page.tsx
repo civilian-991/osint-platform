@@ -1,7 +1,8 @@
 'use client';
 
-import { Settings, Bell, Shield, Database } from 'lucide-react';
+import { Settings, Bell, Shield, Database, Radio } from 'lucide-react';
 import { NotificationSettings } from '@/components/settings';
+import { TelegramSources } from '@/components/settings/TelegramSources';
 
 export default function SettingsPage() {
   return (
@@ -33,6 +34,22 @@ export default function SettingsPage() {
             </div>
             <div className="p-6">
               <NotificationSettings />
+            </div>
+          </section>
+
+          {/* Telegram Sources Section */}
+          <section className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-border bg-muted/30">
+              <h2 className="font-semibold flex items-center gap-2">
+                <Radio className="h-5 w-5" />
+                Telegram Sources
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Active channels monitored for alerts and intelligence
+              </p>
+            </div>
+            <div className="p-6">
+              <TelegramSources />
             </div>
           </section>
 
