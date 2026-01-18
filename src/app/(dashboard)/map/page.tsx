@@ -8,7 +8,7 @@ import AircraftList from '@/components/aircraft/AircraftList';
 import IntelAlertPanel from '@/components/alerts/IntelAlertPanel';
 import { MLDashboard } from '@/components/ml';
 import type { PositionLatest } from '@/lib/types/aircraft';
-import { RefreshCw, Wifi, WifiOff, Radio, Brain, Shield, Crosshair, Plane } from 'lucide-react';
+import { RefreshCw, WifiOff, Radio, Brain, Shield, Crosshair } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 // Dynamically import map to avoid SSR issues with Mapbox
@@ -29,13 +29,12 @@ export default function MapPage() {
   const [showMLPanel, setShowMLPanel] = useState(false);
   const [showAlertsPanel, setShowAlertsPanel] = useState(true);
   const [showStrikes, setShowStrikes] = useState(true);
-  const [showAllAircraft, setShowAllAircraft] = useState(false); // Toggle for all aircraft like ADSBexchange
+  // Military only - no civilian aircraft toggle
 
   const { positions, loading, error, refresh } = useAircraft({
     live: true,
-    refreshInterval: showAllAircraft ? 60000 : 30000, // Slower refresh for all aircraft
-    military: !showAllAircraft,
-    all: showAllAircraft,
+    refreshInterval: 30000,
+    military: true, // Only military aircraft
   });
 
   const { formations } = useFormations(true);
@@ -103,21 +102,6 @@ export default function MapPage() {
           >
             <Crosshair className="h-4 w-4" />
             Strikes
-          </button>
-
-          {/* All Aircraft Toggle - Like ADSBexchange */}
-          <button
-            onClick={() => setShowAllAircraft(!showAllAircraft)}
-            className={cn(
-              'flex items-center gap-2 px-3 py-2 glass rounded-lg text-sm font-medium transition-all duration-200',
-              showAllAircraft
-                ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
-                : 'text-foreground hover:bg-muted/50'
-            )}
-            title="Show all aircraft (military + civilian) like ADSBexchange"
-          >
-            <Plane className="h-4 w-4" />
-            {showAllAircraft ? 'All' : 'Military'}
           </button>
 
           <button
