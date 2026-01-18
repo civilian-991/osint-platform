@@ -259,8 +259,10 @@ export function calculateAngularVelocity(points: Point[]): AngularVelocityResult
     const delta = normalizeAngleDelta(bearing2 - bearing1);
     headingChanges.push(delta);
 
-    if (points[i].timestamp && points[i - 1].timestamp) {
-      timeDeltas.push((points[i].timestamp - points[i - 1].timestamp) / 60000); // Convert to minutes
+    const t1 = points[i].timestamp;
+    const t0 = points[i - 1].timestamp;
+    if (t1 && t0) {
+      timeDeltas.push((t1 - t0) / 60000); // Convert to minutes
     }
   }
 

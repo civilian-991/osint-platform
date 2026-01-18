@@ -21,7 +21,7 @@ interface PatternOverlayProps {
   visible?: boolean;
 }
 
-const PATTERN_COLORS: Record<FlightPattern, string> = {
+const PATTERN_COLORS: Record<NonNullable<FlightPattern>, string> = {
   orbit: '#10b981', // emerald
   racetrack: '#f59e0b', // amber
   holding: '#8b5cf6', // violet
@@ -55,7 +55,7 @@ export default function PatternOverlay({
       .filter(p => p.center_lat && p.center_lon && p.radius_nm && p.pattern_type)
       .map((pattern) => {
         const radiusMeters = (pattern.radius_nm || 10) * NM_TO_METERS;
-        const color = PATTERN_COLORS[pattern.pattern_type] || '#6b7280';
+        const color = pattern.pattern_type ? PATTERN_COLORS[pattern.pattern_type] : '#6b7280';
 
         return {
           type: 'Feature',
@@ -147,7 +147,7 @@ function formatPatternLabel(pattern: PatternData): string {
 
 // Helper component to display pattern legend
 export function PatternLegend({ className }: { className?: string }) {
-  const patternTypes: Array<{ type: FlightPattern; label: string }> = [
+  const patternTypes: Array<{ type: NonNullable<FlightPattern>; label: string }> = [
     { type: 'orbit', label: 'Orbit' },
     { type: 'racetrack', label: 'Racetrack' },
     { type: 'holding', label: 'Holding' },
