@@ -32,70 +32,147 @@ const MILITARY_HEX_RANGES: Array<{
   { country: 'China', start: 0x780000, end: 0x787FFF },
 ];
 
+// Civilian type codes that should NEVER be flagged as military
+// These might otherwise match military patterns (e.g., T154 matching trainer pattern)
+const CIVILIAN_TYPE_CODES: string[] = [
+  // Tupolev (T-prefix would match trainer pattern)
+  'T154', 'T134', 'T204', 'T214', 'TU54', 'TU34',
+  // Fokker (F-prefix would match fighter pattern)
+  'F50', 'F70', 'F100', 'F27', 'F28',
+  // Airbus
+  'A318', 'A319', 'A320', 'A321', 'A20N', 'A21N',
+  'A330', 'A332', 'A333', 'A338', 'A339',
+  'A340', 'A342', 'A343', 'A345', 'A346',
+  'A350', 'A359', 'A35K',
+  'A380', 'A388',
+  // Boeing
+  'B731', 'B732', 'B733', 'B734', 'B735', 'B736', 'B737', 'B738', 'B739',
+  'B37M', 'B38M', 'B39M', 'B3XM',
+  'B741', 'B742', 'B743', 'B744', 'B748', 'B74S',
+  'B752', 'B753', 'B757',
+  'B762', 'B763', 'B764', 'B767',
+  'B772', 'B773', 'B77L', 'B77W', 'B778', 'B779',
+  'B781', 'B788', 'B789', 'B78X', 'B787',
+  // Embraer regional jets
+  'E170', 'E175', 'E190', 'E195', 'E75L', 'E75S', 'E290', 'E295',
+  // Bombardier/CRJ
+  'CRJ1', 'CRJ2', 'CRJ7', 'CRJ9', 'CRJX',
+  'BCS1', 'BCS3', // A220
+  // ATR
+  'AT43', 'AT45', 'AT72', 'AT75', 'AT76', 'ATR4', 'ATR7',
+  // Dash 8
+  'DH8A', 'DH8B', 'DH8C', 'DH8D',
+  // Antonov civilian cargo/passenger
+  'A124', 'A148', 'A158',
+  // Sukhoi Superjet (civilian)
+  'SU95', 'SU9F',
+  // COMAC
+  'C919', 'ARJ2',
+  // MD/DC (civilian)
+  'MD11', 'MD80', 'MD81', 'MD82', 'MD83', 'MD87', 'MD88', 'MD90',
+  'DC10', 'DC87', 'DC93', 'DC94', 'DC95',
+];
+
 // Type codes for military aircraft categories
+// IMPORTANT: Patterns must be specific to avoid matching civilian aircraft
 const MILITARY_TYPE_PATTERNS: Record<MilitaryCategory, RegExp[]> = {
   tanker: [
-    /^KC\d{2,3}/i,
-    /^A33[02]/i,
-    /^A400/i,
-    /MRTT/i,
+    /^KC-?\d{2,3}/i,  // KC-135, KC-10, KC-46
+    /^MRTT/i,         // Multi Role Tanker Transport
+    /^A330.*MRTT/i,   // A330 MRTT specifically
   ],
   awacs: [
-    /^E-?3/i,
-    /^E-?7/i,
-    /^E767/i,
+    /^E-?3[A-Z]?$/i,  // E-3 Sentry (AWACS) - must be E-3 only, not E300
+    /^E-?7[A-Z]?$/i,  // E-7 Wedgetail
+    /^E767/i,         // E-767
     /AWACS/i,
   ],
   isr: [
-    /^RC-?135/i,
-    /^EP-?3/i,
-    /^P-?8/i,
-    /^RQ-?\d/i,
-    /^MQ-?\d/i,
-    /^U-?2/i,
-    /^E-?8/i,
+    /^RC-?135/i,      // RC-135 variants
+    /^EP-?3/i,        // EP-3 Aries
+    /^P-?8/i,         // P-8 Poseidon
+    /^RQ-?\d/i,       // RQ-4 Global Hawk, etc.
+    /^MQ-?\d/i,       // MQ-9 Reaper, etc.
+    /^U-?2/i,         // U-2 Dragon Lady
+    /^E-?8/i,         // E-8 JSTARS
     /JSTARS/i,
     /SENTINEL/i,
-    /HAWK/i,
     /REAPER/i,
+    /^GLEX$/i,        // Global Express (often ISR)
   ],
   transport: [
-    /^C-?17/i,
-    /^C-?5/i,
-    /^C-?130/i,
-    /^C-?30J/i,
-    /^A400/i,
-    /^AN-?\d{2}/i,
-    /^IL-?76/i,
+    /^C-?17/i,        // C-17 Globemaster
+    /^C-?5[AM]?$/i,   // C-5 Galaxy (C-5A, C-5M)
+    /^C-?130/i,       // C-130 Hercules
+    /^C-?30J/i,       // C-130J
+    /^C-?27/i,        // C-27 Spartan
+    /^C-?2[A]?$/i,    // C-2 Greyhound
+    /^A400/i,         // A400M Atlas
+    /^IL-?76/i,       // Il-76 (mostly military in Middle East)
   ],
   fighter: [
-    /^F-?\d{2}/i,
-    /^FA-?18/i,
-    /^F-?22/i,
-    /^F-?35/i,
-    /^SU-?\d{2}/i,
-    /^MIG/i,
-    /^TYPHOON/i,
-    /^RAFALE/i,
-    /^TORNADO/i,
+    // Specific US fighters (not generic F-\d{2} which matches F50 Fokker!)
+    /^F-?14/i,        // F-14 Tomcat
+    /^F-?15/i,        // F-15 Eagle
+    /^F-?16/i,        // F-16 Fighting Falcon
+    /^F-?18/i,        // F/A-18 Hornet
+    /^FA-?18/i,       // F/A-18
+    /^F-?22/i,        // F-22 Raptor
+    /^F-?35/i,        // F-35 Lightning II
+    /^F-?4/i,         // F-4 Phantom
+    /^F-?5/i,         // F-5 Tiger
+    /^A-?10/i,        // A-10 Warthog
+    // Russian/Soviet fighters
+    /^SU-?27/i,       // Su-27 Flanker
+    /^SU-?30/i,       // Su-30
+    /^SU-?33/i,       // Su-33
+    /^SU-?34/i,       // Su-34
+    /^SU-?35/i,       // Su-35
+    /^SU-?57/i,       // Su-57
+    /^MIG-?\d{2}/i,   // MiG variants
+    // European fighters
+    /TYPHOON/i,       // Eurofighter Typhoon
+    /^EF2K/i,         // Eurofighter 2000
+    /RAFALE/i,        // Dassault Rafale
+    /TORNADO/i,       // Panavia Tornado
+    /GRIPEN/i,        // JAS 39 Gripen
+    /MIRAGE/i,        // Dassault Mirage
+    // Chinese fighters
+    /^J-?\d{1,2}/i,   // J-10, J-11, J-20, etc.
   ],
   helicopter: [
-    /^H-?60/i,
-    /^UH-?60/i,
-    /^AH-?64/i,
-    /^CH-?47/i,
-    /^V-?22/i,
-    /^MH-?53/i,
-    /^HH-?60/i,
+    /^H-?60/i,        // H-60 family
+    /^UH-?60/i,       // UH-60 Black Hawk
+    /^AH-?64/i,       // AH-64 Apache
+    /^CH-?47/i,       // CH-47 Chinook
+    /^CH-?53/i,       // CH-53 Sea Stallion
+    /^V-?22/i,        // V-22 Osprey
+    /^MH-?53/i,       // MH-53 Pave Low
+    /^MH-?60/i,       // MH-60 variants
+    /^HH-?60/i,       // HH-60 Pave Hawk
+    /^AH-?1/i,        // AH-1 Cobra
+    /^OH-?58/i,       // OH-58 Kiowa
     /APACHE/i,
     /BLACKHAWK/i,
     /CHINOOK/i,
     /OSPREY/i,
+    /^KA-?52/i,       // Ka-52 Alligator
+    /^MI-?24/i,       // Mi-24 Hind
+    /^MI-?28/i,       // Mi-28 Havoc
+    /^MI-?35/i,       // Mi-35
   ],
   trainer: [
-    /^T-?\d{1,2}/i,
+    // Specific trainer aircraft only (NOT generic T-\d which matches Tupolev!)
+    /^T-?38/i,        // T-38 Talon
+    /^T-?6[A-Z]?$/i,  // T-6 Texan II (but not T600 etc)
+    /^T-?45/i,        // T-45 Goshawk
+    /^T-?50/i,        // T-50 Golden Eagle
+    /^T-?1[A-Z]?$/i,  // T-1 Jayhawk
+    /^T-?37/i,        // T-37 Tweet
+    /^PC-?21/i,       // Pilatus PC-21
+    /^PC-?9/i,        // Pilatus PC-9
+    /^HAWK/i,         // BAE Hawk trainer
     /TEXAN/i,
-    /HAWK/i,
   ],
   other: [],
 };
@@ -149,6 +226,7 @@ const MILITARY_CALLSIGN_PATTERNS: RegExp[] = [
 
 // Callsign prefixes for CIVILIAN airlines (to exclude false positives)
 const CIVILIAN_AIRLINE_PREFIXES: string[] = [
+  // === MIDDLE EAST & NORTH AFRICA (Primary Focus) ===
   'FDB',   // FlyDubai
   'UAE',   // Emirates
   'ETD',   // Etihad
@@ -158,106 +236,233 @@ const CIVILIAN_AIRLINE_PREFIXES: string[] = [
   'SVA',   // Saudia
   'MEA',   // Middle East Airlines
   'THY',   // Turkish Airlines
-  'PGT',   // Pegasus
+  'TK',    // Turkish Airlines (IATA)
+  'PGT',   // Pegasus Airlines
+  'PC',    // Pegasus (IATA)
   'AXB',   // Air Arabia
-  'FJI',   // Fly Jordan
+  'ABY',   // Air Arabia Abu Dhabi
+  'G9',    // Air Arabia (IATA)
   'RJA',   // Royal Jordanian
+  'RJ',    // Royal Jordanian (IATA)
   'MSR',   // EgyptAir
-  'MSC',   // EgyptAir (alternate)
+  'MS',    // EgyptAir (IATA)
+  'MSC',   // EgyptAir Cargo
   'ELY',   // El Al
+  'LY',    // El Al (IATA)
   'IRA',   // Iran Air
-  'IRC',   // Iran Aseman
+  'IR',    // Iran Air (IATA)
+  'IRC',   // Iran Aseman Airlines
+  'EP',    // Iran Aseman (IATA)
+  'IRZ',   // SAHA Airlines (Iran)
+  'IRM',   // Mahan Air (Iran)
+  'W5',    // Mahan Air (IATA)
+  'IRK',   // Kish Air (Iran)
   'SYR',   // Syrian Air
-  'LBN',   // Lebanese Airlines
+  'RB',    // Syrian Air (IATA)
   'CYP',   // Cyprus Airways
   'OMA',   // Oman Air
-  'ABY',   // Air Arabia
+  'WY',    // Oman Air (IATA)
+  'SAW',   // Salam Air (Oman)
+  'OV',    // Salam Air (IATA)
   'NIA',   // Nile Air
-  'AEE',   // Aegean
-  'WZZ',   // Wizz Air
-  'RYR',   // Ryanair
-  'EZY',   // EasyJet
-  'DLH',   // Lufthansa
-  'BAW',   // British Airways
-  'AFR',   // Air France
-  'KLM',   // KLM
-  'SWR',   // Swiss
-  'AUA',   // Austrian
-  'THA',   // Thai Airways
-  'SIA',   // Singapore
-  'CPA',   // Cathay Pacific
-  'AAL',   // American
-  'DAL',   // Delta
-  'UAL',   // United
-  'SWA',   // Southwest
-  'FFT',   // Frontier
-  'JBU',   // JetBlue
-  'ASA',   // Alaska
-  'ACA',   // Air Canada
-  'JAL',   // Japan Airlines
-  'ANA',   // All Nippon Airways
-  'CES',   // China Eastern
-  'CSN',   // China Southern
-  'CCA',   // Air China
-  'KAL',   // Korean Air
-  'AAR',   // Asiana
-  'TUI',   // TUI
-  'ICE',   // Icelandair
-  'FIN',   // Finnair
-  'SAS',   // Scandinavian
-  'TAP',   // TAP Portugal
-  'IBE',   // Iberia
-  'VLG',   // Vueling
-  'AZA',   // Alitalia/ITA
-  'ROT',   // TAROM
-  'LOT',   // LOT Polish
-  'CSA',   // Czech Airlines
-  'AFL',   // Aeroflot
-  'TRA',   // Transavia
-  'EWG',   // Eurowings
-  'BEL',   // Brussels Airlines
-  'STW',   // Saudia Cargo (civilian)
-  'LMU',   // Loong Air
-  'AXY',   // Executive jets (often private)
-  'AWG',   // Air Bucharest
+  'JZR',   // Jazeera Airways (Kuwait)
+  'J9',    // Jazeera Airways (IATA)
+  'NAS',   // Flynas (Saudi)
+  'XY',    // Flynas (IATA)
+  'NSH',   // NAS Air / Flynas
   'ADY',   // Abu Dhabi Aviation
-  'ETH',   // Ethiopian Airlines
-  'KQA',   // Kenya Airways
-  'SAA',   // South African Airways
-  'RAM',   // Royal Air Maroc
+  'IAW',   // Iraqi Airways
+  'IA',    // Iraqi Airways (IATA)
+  'YMN',   // Yemenia
+  'IY',    // Yemenia (IATA)
+  'LBT',   // Nouvelair (Tunisia)
   'TUN',   // Tunisair
-  'ALK',   // SriLankan Airlines
-  'PIA',   // Pakistan International
-  'BIA',   // Royal Brunei
-  'MAS',   // Malaysia Airlines
-  'GIA',   // Garuda Indonesia
-  'VNL',   // VietJet
-  'HVN',   // Vietnam Airlines
-  'CEB',   // Cebu Pacific
-  'PAL',   // Philippine Airlines
-  'AXM',   // AirAsia
-  'AIQ',   // AirAsia India
-  'JST',   // Jetstar
-  'VOZ',   // Virgin Australia
-  'QFA',   // Qantas
-  'ANZ',   // Air New Zealand
-  'FJA',   // Fiji Airways
-  'UAE',   // Emirates (duplicate intentional)
-  // NOTE: UAF = UAE Air Force - do NOT add to civilian list!
-  'NSH',   // NAS Air / FlyNas
-  'SAI',   // Shaheen Air
-  'PHS',   // Philippine Sun
+  'TU',    // Tunisair (IATA)
+  'TAR',   // Tunis Air
+  'LBY',   // Libyan Airlines
+  'DAH',   // Air Algerie
+  'AH',    // Air Algerie (IATA)
+  'RAM',   // Royal Air Maroc
+  'AT',    // Royal Air Maroc (IATA)
+  'EAL',   // ALIA (former Royal Jordanian)
+  'AMC',   // Air Malta
+
+  // === TURKEY ===
   'SXS',   // Sun Express
+  'XQ',    // Sun Express (IATA)
+  'AJA',   // AtlasGlobal (Turkey)
+  'KK',    // AtlasGlobal (IATA)
+  'OHY',   // Onur Air
+  '8Q',    // Onur Air (IATA)
+  'THU',   // Turkish Airlines (alternate)
+  'TJK',   // Corendon Airlines Turkey
+
+  // === EUROPE ===
+  'AEE',   // Aegean Airlines
+  'A3',    // Aegean (IATA)
+  'WZZ',   // Wizz Air
+  'W6',    // Wizz Air (IATA)
+  'RYR',   // Ryanair
+  'FR',    // Ryanair (IATA)
+  'EZY',   // EasyJet
+  'U2',    // EasyJet (IATA)
+  'EJU',   // EasyJet Europe
+  'DLH',   // Lufthansa
+  'LH',    // Lufthansa (IATA)
+  'BAW',   // British Airways
+  'BA',    // British Airways (IATA)
+  'AFR',   // Air France
+  'AF',    // Air France (IATA)
+  'KLM',   // KLM
+  'KL',    // KLM (IATA)
+  'SWR',   // Swiss
+  'LX',    // Swiss (IATA)
+  'AUA',   // Austrian Airlines
+  'OS',    // Austrian (IATA)
+  'SAS',   // Scandinavian Airlines
+  'SK',    // SAS (IATA)
+  'TAP',   // TAP Portugal
+  'TP',    // TAP (IATA)
+  'IBE',   // Iberia
+  'IB',    // Iberia (IATA)
+  'VLG',   // Vueling
+  'VY',    // Vueling (IATA)
+  'AZA',   // ITA Airways (former Alitalia)
+  'AZ',    // ITA (IATA)
+  'ROT',   // TAROM
+  'RO',    // TAROM (IATA)
+  'LOT',   // LOT Polish
+  'LO',    // LOT (IATA)
+  'CSA',   // Czech Airlines
+  'OK',    // Czech Airlines (IATA)
+  'AFL',   // Aeroflot
+  'SU',    // Aeroflot (IATA)
+  'TRA',   // Transavia
+  'HV',    // Transavia (IATA)
+  'EWG',   // Eurowings
+  'EW',    // Eurowings (IATA)
+  'BEL',   // Brussels Airlines
+  'SN',    // Brussels Airlines (IATA)
+  'NWG',   // Norwegian
+  'DY',    // Norwegian (IATA)
+  'FIN',   // Finnair
+  'AY',    // Finnair (IATA)
+  'ICE',   // Icelandair
+  'FI',    // Icelandair (IATA)
+  'TUI',   // TUI Airways
+
+  // === ASIA ===
+  'THA',   // Thai Airways
+  'TG',    // Thai Airways (IATA)
+  'SIA',   // Singapore Airlines
+  'SQ',    // Singapore (IATA)
+  'CPA',   // Cathay Pacific
+  'CX',    // Cathay (IATA)
+  'JAL',   // Japan Airlines
+  'JL',    // JAL (IATA)
+  'ANA',   // All Nippon Airways
+  'NH',    // ANA (IATA)
+  'CES',   // China Eastern
+  'MU',    // China Eastern (IATA)
+  'CSN',   // China Southern
+  'CZ',    // China Southern (IATA)
+  'CCA',   // Air China
+  'CA',    // Air China (IATA)
+  'KAL',   // Korean Air
+  'KE',    // Korean Air (IATA)
+  'AAR',   // Asiana Airlines
+  'OZ',    // Asiana (IATA)
+  'MAS',   // Malaysia Airlines
+  'MH',    // Malaysia Airlines (IATA)
+  'GIA',   // Garuda Indonesia
+  'GA',    // Garuda (IATA)
+  'VNL',   // VietJet Air
+  'VJ',    // VietJet (IATA)
+  'HVN',   // Vietnam Airlines
+  'VN',    // Vietnam Airlines (IATA)
+  'CEB',   // Cebu Pacific
+  '5J',    // Cebu Pacific (IATA)
+  'PAL',   // Philippine Airlines
+  'PR',    // Philippine Airlines (IATA)
+  'AXM',   // AirAsia
+  'AK',    // AirAsia (IATA)
+  'AIQ',   // AirAsia India
   'XAX',   // AirAsia X
-  'SKW',   // SkyWest
+  'D7',    // AirAsia X (IATA)
+  'ALK',   // SriLankan Airlines
+  'UL',    // SriLankan (IATA)
+  'PIA',   // Pakistan International Airlines
+  'PK',    // PIA (IATA)
+  'LMU',   // Loong Air (China)
+
+  // === AMERICAS ===
+  'AAL',   // American Airlines
+  'AA',    // American Airlines (IATA)
+  'DAL',   // Delta Air Lines
+  'DL',    // Delta (IATA)
+  'UAL',   // United Airlines
+  'UA',    // United (IATA)
+  'SWA',   // Southwest Airlines
+  'WN',    // Southwest (IATA)
+  'FFT',   // Frontier Airlines
+  'F9',    // Frontier (IATA)
+  'JBU',   // JetBlue Airways
+  'B6',    // JetBlue (IATA)
+  'ASA',   // Alaska Airlines
+  'AS',    // Alaska (IATA)
+  'ACA',   // Air Canada
+  'AC',    // Air Canada (IATA)
+  'SKW',   // SkyWest Airlines
+  'OO',    // SkyWest (IATA)
   'ENY',   // Envoy Air
+  'MQ',    // Envoy (IATA)
   'PDT',   // Piedmont Airlines
   'JIA',   // PSA Airlines
   'RPA',   // Republic Airways
-  'TCX',   // Thomas Cook
-  'MON',   // Monarch
-  'NWG',   // Norwegian
-  'DY',    // Norwegian (alternate)
+
+  // === AFRICA ===
+  'ETH',   // Ethiopian Airlines
+  'ET',    // Ethiopian (IATA)
+  'KQA',   // Kenya Airways
+  'KQ',    // Kenya Airways (IATA)
+  'SAA',   // South African Airways
+  'SA',    // SAA (IATA)
+
+  // === OCEANIA ===
+  'JST',   // Jetstar
+  'JQ',    // Jetstar (IATA)
+  'VOZ',   // Virgin Australia
+  'VA',    // Virgin Australia (IATA)
+  'QFA',   // Qantas
+  'QF',    // Qantas (IATA)
+  'ANZ',   // Air New Zealand
+  'NZ',    // Air New Zealand (IATA)
+  'FJA',   // Fiji Airways
+  'FJ',    // Fiji Airways (IATA)
+
+  // === SOUTH ASIA ===
+  'BIA',   // Royal Brunei Airlines
+  'BI',    // Royal Brunei (IATA)
+
+  // === CARGO (Civilian) ===
+  'STW',   // Saudia Cargo
+  'FDX',   // FedEx
+  'UPS',   // UPS Airlines
+  'GTI',   // Atlas Air
+  'CLX',   // Cargolux
+  'ADB',   // Antonov Design Bureau (civilian cargo ops)
+
+  // === CHARTERS & PRIVATE ===
+  'AXY',   // Executive jets
+  'AWG',   // Air Bucharest
+  'TCX',   // Thomas Cook (defunct but still in data)
+  'MON',   // Monarch (defunct but still in data)
+  'SAI',   // Shaheen Air
+  'PHS',   // Philippine Sun
+
+  // NOTE: DO NOT ADD:
+  // - UAF (UAE Air Force)
+  // - Any military callsigns
 ];
 
 // Check if ICAO hex is in military range
@@ -273,9 +478,34 @@ export function isHexMilitary(hex: string): { isMilitary: boolean; country?: str
   return { isMilitary: false };
 }
 
+// Check if type code is a known CIVILIAN aircraft (prevents false positives)
+export function isTypeCivilian(typeCode: string | null | undefined): boolean {
+  if (!typeCode) return false;
+
+  const normalized = typeCode.trim().toUpperCase();
+
+  // Direct match against civilian type codes
+  if (CIVILIAN_TYPE_CODES.includes(normalized)) {
+    return true;
+  }
+
+  // Also check without dashes (e.g., A320 vs A-320)
+  const withoutDash = normalized.replace(/-/g, '');
+  if (CIVILIAN_TYPE_CODES.includes(withoutDash)) {
+    return true;
+  }
+
+  return false;
+}
+
 // Get military category from type code
 export function getMilitaryCategory(typeCode: string | null | undefined): MilitaryCategory | null {
   if (!typeCode) return null;
+
+  // FIRST: Check if it's a known civilian type code
+  if (isTypeCivilian(typeCode)) {
+    return null;
+  }
 
   for (const [category, patterns] of Object.entries(MILITARY_TYPE_PATTERNS) as [MilitaryCategory, RegExp[]][]) {
     for (const pattern of patterns) {
@@ -412,6 +642,17 @@ export function detectMilitary(aircraft: ADSBAircraft): {
 
   // Also check description field which sometimes contains operator info
   if (isOperatorCivilian(aircraft.desc)) {
+    return {
+      isMilitary: false,
+      category: null,
+      country: null,
+      confidence: 'high',
+    };
+  }
+
+  // Check if type code is a known CIVILIAN aircraft (e.g., A320, B738, T154)
+  // This prevents false positives where civilian type codes might match military patterns
+  if (isTypeCivilian(aircraft.t)) {
     return {
       isMilitary: false,
       category: null,
