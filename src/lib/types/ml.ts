@@ -44,7 +44,7 @@ export type AnomalyType =
   | 'route'
   | 'timing'
   | 'formation'
-  | 'behavior';
+  | 'behavioral';
 
 export interface AnomalyDetectionInput {
   aircraft_id: string;
@@ -88,6 +88,9 @@ export type FlightIntent =
   | 'combat'
   | 'transit'
   | 'exercise';
+
+// Alias for UI components with 'unknown' option
+export type IntentType = FlightIntent | 'unknown';
 
 export interface IntentEvidence {
   type: string;
@@ -201,6 +204,7 @@ export interface EnhancedEntity {
   source_id: string;
   entity_type: MilitaryEntityType;
   entity_name: string;
+  name: string; // Alias for entity_name for UI compatibility
   normalized_name: string | null;
   confidence: number;
   context: string | null;
@@ -214,7 +218,11 @@ export type MilitaryEntityType =
   | 'operation_name'
   | 'equipment'
   | 'personnel'
-  | 'aircraft';
+  | 'aircraft'
+  | 'location';
+
+// Alias for UI components
+export type EnhancedEntityType = MilitaryEntityType;
 
 export interface EntityExtractionResult {
   entities: ExtractedEntity[];
@@ -260,7 +268,8 @@ export type FormationType =
   | 'tanker_receiver'
   | 'escort'
   | 'strike_package'
-  | 'cap';
+  | 'cap'
+  | 'unknown';
 
 export type FormationDetectionMethod =
   | 'spatial_clustering'

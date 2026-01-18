@@ -1,17 +1,34 @@
 'use client';
 
-import { Plane, ArrowUp, Gauge, MapPin } from 'lucide-react';
+import { Plane, ArrowUp, Gauge, MapPin, Brain } from 'lucide-react';
 import type { PositionLatest, MilitaryCategory } from '@/lib/types/aircraft';
+import type { ThreatLevel, IntentType, AnomalyType } from '@/lib/types/ml';
 import { getMilitaryCategoryColor, getMilitaryCategoryLabel } from '@/lib/utils/military-db';
 import { formatAltitude, formatSpeed, formatCoordinates } from '@/lib/utils/geo';
 import { cn } from '@/lib/utils/cn';
 import { formatDistanceToNow } from 'date-fns';
+import { ThreatLevelBadge, IntentBadge, AnomalyCount, FormationBadge } from '@/components/ml';
+import type { FormationType } from '@/lib/types/ml';
+
+interface MLIndicators {
+  threatLevel?: ThreatLevel;
+  threatScore?: number;
+  intent?: IntentType;
+  intentConfidence?: number;
+  anomalyCount?: number;
+  maxAnomalySeverity?: number;
+  formation?: {
+    type: FormationType;
+    aircraftCount: number;
+  };
+}
 
 interface AircraftCardProps {
   position: PositionLatest;
   onClick?: () => void;
   isSelected?: boolean;
   compact?: boolean;
+  mlData?: MLIndicators;
 }
 
 export default function AircraftCard({
@@ -19,6 +36,7 @@ export default function AircraftCard({
   onClick,
   isSelected,
   compact = false,
+  mlData,
 }: AircraftCardProps) {
   const category = position.aircraft?.military_category as MilitaryCategory | null;
   const color = getMilitaryCategoryColor(category);
@@ -41,27 +59,45 @@ export default function AircraftCard({
         style={isSelected ? { boxShadow: `0 0 20px ${color}20` } : undefined}
       >
         <div
-          className="p-1.5 rounded-lg border"
+          className="p-1.5 rounded-lg border relative"
           style={{
             backgroundColor: `${color}15`,
             borderColor: `${color}30`
           }}
         >
           <Plane className="h-4 w-4" style={{ color }} />
+          {mlData?.threatLevel && mlData.threatLevel !== 'minimal' && mlData.threatLevel !== 'low' && (
+            <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          )}
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="font-mono font-semibold text-foreground truncate">
-            {position.callsign || position.icao_hex}
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-semibold text-foreground truncate">
+              {position.callsign || position.icao_hex}
+            </span>
+            {mlData?.formation && (
+              <FormationBadge type={mlData.formation.type} size="sm" />
+            )}
           </div>
-          <div className="text-xs text-muted-foreground">
-            {position.aircraft?.type_code || 'Unknown'}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground">
+              {position.aircraft?.type_code || 'Unknown'}
+            </span>
+            {mlData?.intent && mlData.intent !== 'unknown' && (
+              <IntentBadge intent={mlData.intent} size="sm" />
+            )}
           </div>
         </div>
 
-        <div className="text-right text-xs">
-          <div className="text-foreground font-medium">{formatAltitude(position.altitude)}</div>
-          <div className="text-muted-foreground">{formatSpeed(position.ground_speed)}</div>
+        <div className="flex items-center gap-2">
+          {mlData?.anomalyCount && mlData.anomalyCount > 0 && (
+            <AnomalyCount count={mlData.anomalyCount} maxSeverity={mlData.maxAnomalySeverity || 0} />
+          )}
+          <div className="text-right text-xs">
+            <div className="text-foreground font-medium">{formatAltitude(position.altitude)}</div>
+            <div className="text-muted-foreground">{formatSpeed(position.ground_speed)}</div>
+          </div>
         </div>
       </div>
     );
@@ -111,6 +147,44 @@ export default function AircraftCard({
           {categoryLabel}
         </span>
       </div>
+
+      {/* ML Intelligence Row */}
+      {mlData && (mlData.threatLevel || mlData.intent || mlData.anomalyCount || mlData.formation) && (
+        <div className="flex items-center flex-wrap gap-2 mb-4 p-2.5 rounded-lg bg-muted/20 border border-border/30">
+          <Brain className="h-4 w-4 text-muted-foreground" />
+          {mlData.threatLevel && mlData.threatLevel !== 'minimal' && (
+            <ThreatLevelBadge
+              level={mlData.threatLevel}
+              score={mlData.threatScore}
+              showScore
+              size="sm"
+              animated={mlData.threatLevel === 'critical' || mlData.threatLevel === 'high'}
+            />
+          )}
+          {mlData.intent && mlData.intent !== 'unknown' && (
+            <IntentBadge
+              intent={mlData.intent}
+              confidence={mlData.intentConfidence}
+              showConfidence
+              size="sm"
+            />
+          )}
+          {mlData.formation && (
+            <FormationBadge
+              type={mlData.formation.type}
+              aircraftCount={mlData.formation.aircraftCount}
+              showDetails
+              size="sm"
+            />
+          )}
+          {mlData.anomalyCount && mlData.anomalyCount > 0 && (
+            <AnomalyCount
+              count={mlData.anomalyCount}
+              maxSeverity={mlData.maxAnomalySeverity || 0}
+            />
+          )}
+        </div>
+      )}
 
       {/* Details grid */}
       <div className="grid grid-cols-2 gap-4 mb-4">

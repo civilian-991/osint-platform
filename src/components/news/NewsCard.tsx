@@ -1,16 +1,26 @@
 'use client';
 
-import { ExternalLink, Clock, MapPin, Zap } from 'lucide-react';
+import { ExternalLink, Clock, MapPin, Zap, Brain, Link2 } from 'lucide-react';
 import type { NewsEvent } from '@/lib/types/news';
+import type { EnhancedEntity } from '@/lib/types/ml';
 import CredibilityBadge from './CredibilityBadge';
+import { EntityTagList } from '@/components/ml';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils/cn';
+
+interface EnhancedNewsData {
+  enhancedEntities?: EnhancedEntity[];
+  corroborationScore?: number;
+  corroboratingArticles?: number;
+  threatImplication?: number;
+}
 
 interface NewsCardProps {
   news: NewsEvent;
   onClick?: () => void;
   isSelected?: boolean;
   compact?: boolean;
+  mlData?: EnhancedNewsData;
 }
 
 export default function NewsCard({
@@ -18,6 +28,7 @@ export default function NewsCard({
   onClick,
   isSelected,
   compact = false,
+  mlData,
 }: NewsCardProps) {
   const publishedAgo = formatDistanceToNow(new Date(news.published_at), {
     addSuffix: true,
@@ -175,8 +186,26 @@ export default function NewsCard({
           </div>
         )}
 
-        {/* Entities - color coded */}
-        {news.entities.length > 0 && (
+        {/* ML-Enhanced Entities */}
+        {mlData?.enhancedEntities && mlData.enhancedEntities.length > 0 ? (
+          <div className="pt-3 border-t border-border/30">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Brain className="h-3 w-3 text-primary/70" />
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold">
+                AI-Extracted Entities
+              </span>
+            </div>
+            <EntityTagList
+              entities={mlData.enhancedEntities.map(e => ({
+                name: e.normalized_name || e.name,
+                type: e.entity_type,
+                confidence: e.confidence,
+              }))}
+              maxShow={5}
+              size="sm"
+            />
+          </div>
+        ) : news.entities.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-3 border-t border-border/30">
             {news.entities.slice(0, 4).map((entity, i) => {
               const typeColors: Record<string, string> = {
@@ -203,6 +232,33 @@ export default function NewsCard({
                 +{news.entities.length - 4} more
               </span>
             )}
+          </div>
+        )}
+
+        {/* Corroboration Score */}
+        {mlData?.corroborationScore !== undefined && mlData.corroborationScore > 0 && (
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/30">
+            <Link2 className="h-3.5 w-3.5 text-muted-foreground/50" />
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold">
+                  Corroboration
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {mlData.corroboratingArticles || 0} similar articles
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all',
+                    mlData.corroborationScore >= 0.7 ? 'bg-green-500' :
+                    mlData.corroborationScore >= 0.4 ? 'bg-amber-500' : 'bg-slate-500'
+                  )}
+                  style={{ width: `${Math.min(mlData.corroborationScore * 100, 100)}%` }}
+                />
+              </div>
+            </div>
           </div>
         )}
 
