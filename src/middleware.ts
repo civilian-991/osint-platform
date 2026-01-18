@@ -7,6 +7,7 @@ export async function middleware(request: NextRequest) {
 
   const isProtectedRoute =
     request.nextUrl.pathname === '/' ||
+    request.nextUrl.pathname.startsWith('/map') ||
     request.nextUrl.pathname.startsWith('/aircraft') ||
     request.nextUrl.pathname.startsWith('/news') ||
     request.nextUrl.pathname.startsWith('/correlations') ||

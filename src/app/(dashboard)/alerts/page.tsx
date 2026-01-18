@@ -30,9 +30,14 @@ export default function AlertsPage() {
   const fetchAlerts = useCallback(async () => {
     try {
       setLoading(true);
-      // For now, use mock data since we don't have a dedicated alerts endpoint
-      // In production, this would fetch from /api/alerts
-      setAlerts([]);
+      const response = await fetch('/api/alerts');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch alerts: ${response.status}`);
+      }
+      const result = await response.json();
+      if (result.success) {
+        setAlerts(result.data || []);
+      }
     } catch (err) {
       console.error('Failed to fetch alerts:', err);
     } finally {
@@ -51,19 +56,46 @@ export default function AlertsPage() {
   const unreadCount = alerts.filter((a) => !a.is_read).length;
 
   const markAsRead = async (id: string) => {
-    setAlerts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, is_read: true } : a))
-    );
+    try {
+      await fetch('/api/alerts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, is_read: true }),
+      });
+      setAlerts((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, is_read: true } : a))
+      );
+    } catch (err) {
+      console.error('Failed to mark alert as read:', err);
+    }
   };
 
   const dismissAlert = async (id: string) => {
-    setAlerts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, is_dismissed: true } : a))
-    );
+    try {
+      await fetch('/api/alerts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, is_dismissed: true }),
+      });
+      setAlerts((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, is_dismissed: true } : a))
+      );
+    } catch (err) {
+      console.error('Failed to dismiss alert:', err);
+    }
   };
 
   const markAllAsRead = async () => {
-    setAlerts((prev) => prev.map((a) => ({ ...a, is_read: true })));
+    try {
+      await fetch('/api/alerts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mark_all_read: true }),
+      });
+      setAlerts((prev) => prev.map((a) => ({ ...a, is_read: true })));
+    } catch (err) {
+      console.error('Failed to mark all as read:', err);
+    }
   };
 
   return (

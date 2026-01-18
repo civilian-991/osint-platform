@@ -27,7 +27,7 @@ export default function DashboardLayout({
   };
 
   const navItems = [
-    { href: '/', icon: Map, label: 'Map' },
+    { href: '/map', icon: Map, label: 'Map' },
     { href: '/aircraft', icon: Plane, label: 'Aircraft' },
     { href: '/news', icon: Newspaper, label: 'News' },
     { href: '/correlations', icon: Link2, label: 'Correlations' },
