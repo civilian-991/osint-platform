@@ -1,8 +1,9 @@
 'use client';
 
-import { Settings, Bell, Shield, Database, Radio } from 'lucide-react';
+import { Settings, Bell, Shield, Database, Radio, Bot } from 'lucide-react';
 import { NotificationSettings } from '@/components/settings';
 import { TelegramSources } from '@/components/settings/TelegramSources';
+import { TelegramBotSettings } from '@/components/settings/TelegramBotSettings';
 
 export default function SettingsPage() {
   return (
@@ -50,6 +51,22 @@ export default function SettingsPage() {
             </div>
             <div className="p-6">
               <TelegramSources />
+            </div>
+          </section>
+
+          {/* Telegram Bot Section */}
+          <section className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-border bg-muted/30">
+              <h2 className="font-semibold flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                Telegram Bot Alerts
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Send real-time alerts to your Telegram channel
+              </p>
+            </div>
+            <div className="p-6">
+              <TelegramBotSettings />
             </div>
           </section>
 

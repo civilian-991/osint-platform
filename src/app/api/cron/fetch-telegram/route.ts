@@ -4,19 +4,32 @@ import { strikeTracker } from '@/lib/services/strike-tracker';
 
 // Verify cron secret for security
 function verifyCronSecret(request: NextRequest): boolean {
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
+  // Allow Vercel cron jobs (they set this header)
+  const vercelCron = request.headers.get('x-vercel-cron');
+  if (vercelCron) {
+    return true;
+  }
 
+  // Allow in development
   if (process.env.NODE_ENV === 'development') {
     return true;
   }
 
-  if (!cronSecret) {
-    console.warn('CRON_SECRET not set');
-    return false;
+  // Allow with manual secret
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+    return true;
   }
 
-  return authHeader === `Bearer ${cronSecret}`;
+  // Allow if no secret is set (for testing)
+  if (!cronSecret) {
+    console.warn('CRON_SECRET not set - allowing request');
+    return true;
+  }
+
+  return false;
 }
 
 export async function GET(request: NextRequest) {

@@ -6,6 +6,7 @@
  */
 
 import { query, queryOne, execute } from '@/lib/db';
+import { telegramBot } from './telegram-bot';
 
 export interface StrikeEvent {
   id: string;
@@ -105,7 +106,7 @@ class StrikeTrackerService {
       );
 
       if (result) {
-        return {
+        const strikeEvent: StrikeEvent = {
           id: result.id,
           event_type: eventType,
           latitude: location.latitude,
@@ -118,6 +119,24 @@ class StrikeTrackerService {
           reported_at: postedAt.toISOString(),
           is_active: true,
         };
+
+        // Send Telegram alert for the new strike
+        try {
+          await telegramBot.sendStrikeAlert({
+            eventType,
+            locationName: location.location_name,
+            region: location.region,
+            description: content.substring(0, 200),
+            latitude: location.latitude,
+            longitude: location.longitude,
+            confidence,
+            source: channelUsername,
+          });
+        } catch (alertError) {
+          console.error('Error sending strike alert to Telegram:', alertError);
+        }
+
+        return strikeEvent;
       }
     } catch (error) {
       console.error('Error inserting strike event:', error);
