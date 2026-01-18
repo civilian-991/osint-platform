@@ -12,7 +12,7 @@ import {
   History,
 } from 'lucide-react';
 import { usePlayback } from '@/hooks/usePlayback';
-import { usePlaybackStore, type PlaybackSpeed, type TimeRange } from '@/lib/stores/playback-store';
+import { usePlaybackStore, type PlaybackState, type PlaybackSpeed, type TimeRange } from '@/lib/stores/playback-store';
 import TimelineScrubber from './TimelineScrubber';
 import SpeedControl from './SpeedControl';
 import TimeRangeSelector from './TimeRangeSelector';
@@ -50,7 +50,7 @@ export default function PlaybackController({ className, onClose }: PlaybackContr
     reset,
   } = usePlayback();
 
-  const events = usePlaybackStore((state) => state.events);
+  const events = usePlaybackStore((state: PlaybackState) => state.events);
   const [showRangeSelector, setShowRangeSelector] = useState(false);
 
   // Load data when time range changes

@@ -20,6 +20,9 @@ const CONFIG = {
 const ALERT_TYPE_BASE_SCORES: Record<AlertType, number> = {
   high_confidence_match: 0.9,
   watchlist_aircraft: 0.85,
+  geofence_entry: 0.8,
+  geofence_exit: 0.75,
+  geofence_dwell: 0.85,
   unusual_pattern: 0.75,
   new_correlation: 0.7,
   breaking_news: 0.65,
