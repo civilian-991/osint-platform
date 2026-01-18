@@ -77,8 +77,9 @@ export async function GET(request: NextRequest) {
         `SELECT m.id, m.content, c.channel_username, c.display_name, m.posted_at, c.category
          FROM telegram_messages m
          JOIN telegram_channels c ON m.channel_id = c.id
-         WHERE m.posted_at > NOW() - INTERVAL '24 hours'
+         WHERE m.posted_at > NOW() - INTERVAL '48 hours'
          AND c.category IN ('alerts', 'military', 'osint')
+         AND m.content IS NOT NULL AND m.content != ''
          ORDER BY m.posted_at DESC
          LIMIT $1`,
         [Math.floor(limit / 3)]
