@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { execute, queryOne, query } from '@/lib/db';
-import { adsbService } from '@/lib/services/adsb';
+import { multiSourceADSB } from '@/lib/services/multi-source-adsb';
 import { detectMilitary } from '@/lib/utils/military-db';
 import type { WatchlistMatch } from '@/lib/types/watchlist';
 
@@ -54,11 +54,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch military aircraft from ADSB.lol
-    const aircraft = await adsbService.fetchMiddleEastMilitary();
-    const withPositions = adsbService.filterWithPosition(aircraft);
+    // Fetch military aircraft from multiple sources
+    const aircraft = await multiSourceADSB.fetchMiddleEastMilitary();
+    const withPositions = aircraft.filter(ac => ac.lat !== undefined && ac.lon !== undefined);
+    const sources = multiSourceADSB.getSourceStats().map(s => s.name).join(', ');
 
-    console.log(`Fetched ${aircraft.length} military aircraft, ${withPositions.length} with positions`);
+    console.log(`Fetched ${aircraft.length} military aircraft from [${sources}], ${withPositions.length} with positions`);
 
     let upsertedAircraft = 0;
     let insertedPositions = 0;
@@ -117,7 +118,7 @@ export async function GET(request: NextRequest) {
               ac.baro_rate || null,
               ac.squawk || null,
               ac.alt_baro === 'ground',
-              'adsb.lol',
+              (ac as any)._source || 'multi-source',
             ]
           );
           insertedPositions++;
@@ -202,13 +203,14 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Processed ${withPositions.length} aircraft`,
+      message: `Processed ${withPositions.length} aircraft from ${sources}`,
       stats: {
         fetched: aircraft.length,
         withPositions: withPositions.length,
         upsertedAircraft,
         insertedPositions,
         watchlistAlerts,
+        sources: multiSourceADSB.getSourceStats(),
       },
       timestamp: new Date().toISOString(),
     });
