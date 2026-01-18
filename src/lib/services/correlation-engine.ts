@@ -11,6 +11,8 @@ import type {
 } from '@/lib/types/correlation';
 import { calculateConfidence, getConfidenceLevel } from '@/lib/types/correlation';
 import { distanceNm, bearing } from '@/lib/utils/geo';
+import { embeddingService } from './embedding-service';
+import { nlpEnhancer } from './nlp-enhancer';
 
 // Configuration
 const CONFIG = {
@@ -148,7 +150,46 @@ export class CorrelationEngine {
       spatialProximity: this.calculateSpatialScore(news, flight, positions),
       sourceCredibility: news.credibility_score,
       patternSignificance: this.calculatePatternScore(flight),
-      corroboration: 0.5, // Would need multiple sources to calculate
+      corroboration: 0.5, // Async calculation done separately via calculateFactorsAsync
+    };
+  }
+
+  /**
+   * Calculate correlation factors with async ML-powered scoring
+   */
+  async calculateFactorsAsync(
+    news: NewsEvent,
+    flight: Flight,
+    positions: Position[],
+    aircraftType?: string | null,
+    aircraftOperator?: string | null
+  ): Promise<CorrelationFactors & { entityScore: number }> {
+    const baseFactors = this.calculateFactors(news, flight, positions);
+
+    // Get real corroboration score from embedding service
+    let corroborationScore = 0.5;
+    try {
+      corroborationScore = await embeddingService.getCorroborationScore(news.id);
+    } catch (error) {
+      console.error('Error getting corroboration score:', error);
+    }
+
+    // Get entity score from NLP enhancer
+    let entityScore = 0;
+    try {
+      entityScore = await nlpEnhancer.calculateEntityScore(
+        news.id,
+        aircraftType || null,
+        aircraftOperator || null
+      );
+    } catch (error) {
+      console.error('Error getting entity score:', error);
+    }
+
+    return {
+      ...baseFactors,
+      corroboration: corroborationScore,
+      entityScore,
     };
   }
 

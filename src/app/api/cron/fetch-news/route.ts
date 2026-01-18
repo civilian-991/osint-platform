@@ -5,6 +5,28 @@ import { correlationEngine } from '@/lib/services/correlation-engine';
 import type { Flight, Position } from '@/lib/types/aircraft';
 import type { NewsEvent } from '@/lib/types/news';
 
+// Helper to queue ML tasks
+async function queueMLTask(
+  taskType: string,
+  entityType: string,
+  entityId: string,
+  payload: Record<string, unknown>,
+  priority: number = 5
+): Promise<void> {
+  if (process.env.ENABLE_ML_PROCESSING !== 'true') {
+    return;
+  }
+
+  try {
+    await execute(
+      `SELECT queue_ml_task($1, $2, $3, $4, $5)`,
+      [taskType, entityType, entityId, JSON.stringify(payload), priority]
+    );
+  } catch (error) {
+    console.error('Error queueing ML task:', error);
+  }
+}
+
 // Verify cron secret for security
 function verifyCronSecret(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
@@ -82,6 +104,22 @@ export async function GET(request: NextRequest) {
         }
 
         insertedNews++;
+
+        // Queue ML tasks for entity extraction and embedding generation
+        await queueMLTask('entity_extraction', 'news_event', newsRecord.id, {
+          title: newsEvent.title,
+          content: newsEvent.content,
+        }, 3); // Higher priority for news processing
+
+        await queueMLTask('embedding_generation', 'news_event', newsRecord.id, {
+          text: newsEvent.content
+            ? `${newsEvent.title}. ${newsEvent.content.substring(0, 500)}`
+            : newsEvent.title,
+          metadata: { title: newsEvent.title },
+        }, 4);
+
+        // Queue corroboration scoring (lower priority, depends on embedding)
+        await queueMLTask('corroboration_scoring', 'news_event', newsRecord.id, {}, 6);
 
         // Try to find correlations with recent flights
         // Get flights from the last 4 hours

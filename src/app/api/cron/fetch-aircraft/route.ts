@@ -4,6 +4,28 @@ import { adsbService } from '@/lib/services/adsb';
 import { detectMilitary } from '@/lib/utils/military-db';
 import type { WatchlistMatch } from '@/lib/types/watchlist';
 
+// Helper to queue ML tasks
+async function queueMLTask(
+  taskType: string,
+  entityType: string,
+  entityId: string,
+  payload: Record<string, unknown>,
+  priority: number = 5
+): Promise<void> {
+  if (process.env.ENABLE_ML_PROCESSING !== 'true') {
+    return;
+  }
+
+  try {
+    await execute(
+      `SELECT queue_ml_task($1, $2, $3, $4, $5)`,
+      [taskType, entityType, entityId, JSON.stringify(payload), priority]
+    );
+  } catch (error) {
+    console.error('Error queueing ML task:', error);
+  }
+}
+
 // Verify cron secret for security
 function verifyCronSecret(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
@@ -99,6 +121,26 @@ export async function GET(request: NextRequest) {
             ]
           );
           insertedPositions++;
+
+          // Queue ML tasks for anomaly detection and profile update
+          const positionData = {
+            latitude: ac.lat,
+            longitude: ac.lon,
+            altitude: typeof ac.alt_baro === 'number' ? ac.alt_baro : null,
+            ground_speed: ac.gs ? Math.round(ac.gs) : null,
+            track: ac.track ? Math.round(ac.track) : null,
+            timestamp: new Date().toISOString(),
+          };
+
+          // Queue anomaly detection (lower priority for real-time)
+          await queueMLTask('anomaly_detection', 'aircraft', aircraftRecord.id, {
+            positions: [positionData],
+          }, 7);
+
+          // Queue profile update (lower priority)
+          await queueMLTask('profile_update', 'aircraft', aircraftRecord.id, {
+            positions: [positionData],
+          }, 8);
         }
 
         // Check watchlists for this aircraft
