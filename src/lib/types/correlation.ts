@@ -94,7 +94,10 @@ export type AlertType =
   | 'unusual_pattern'
   | 'watchlist_aircraft'
   | 'breaking_news'
-  | 'region_activity';
+  | 'region_activity'
+  | 'geofence_entry'
+  | 'geofence_exit'
+  | 'geofence_dwell';
 
 export type AlertSeverity =
   | 'low'

@@ -7,6 +7,14 @@ import {
 } from './gemini-client';
 import { behavioralProfiler } from './behavioral-profiler';
 import { embeddingService } from './embedding-service';
+import { calibrateConfidence, recordPredictionOutcome } from './confidence-calibrator';
+import { applyThreshold, updateThreshold } from './adaptive-thresholds';
+import {
+  createExplanation,
+  createAnomalyExplanation,
+  createIntentExplanation,
+  generateCounterfactuals,
+} from './explainability-engine';
 import type {
   AnomalyDetection,
   AnomalyType,
@@ -73,15 +81,26 @@ export class IntelligenceEngine {
       );
 
       for (const deviation of deviationResult.deviations) {
-        // Only create anomaly if severity exceeds threshold
-        if (deviation.severity < CONFIG.anomalyThreshold) {
+        // Apply adaptive threshold for anomaly detection
+        const thresholdResult = await applyThreshold(
+          'anomaly_detection',
+          deviation.type,
+          deviation.severity
+        );
+
+        // Only create anomaly if severity exceeds adaptive threshold
+        if (!thresholdResult.exceeds) {
           continue;
         }
+
+        // Calibrate confidence score
+        const calibration = await calibrateConfidence('anomaly_detection', deviation.severity);
+        const calibratedSeverity = calibration.calibratedScore;
 
         let analysis: string | null = null;
 
         // Use Gemini for high-severity anomalies
-        if (deviation.severity >= 0.7 && geminiClient.isEnabled()) {
+        if (calibratedSeverity >= 0.7 && geminiClient.isEnabled()) {
           try {
             const prompt = buildAnomalyAnalysisPrompt(
               aircraft?.type_code || 'Unknown',
@@ -111,17 +130,53 @@ export class IntelligenceEngine {
             aircraftId,
             flightId,
             deviation.type as AnomalyType,
-            deviation.severity,
+            calibratedSeverity,
             JSON.stringify(deviation.detected),
             JSON.stringify(deviation.expected),
-            deviation.severity,
+            deviation.severity, // Original score
             analysis,
-            0.8, // Confidence in the anomaly detection
+            thresholdResult.confidence,
           ]
         );
 
         if (anomaly) {
           anomalies.push(anomaly);
+
+          // Create explainability record
+          const detectedFeatures = deviation.detected as Record<string, unknown>;
+          const explainData = createAnomalyExplanation(
+            calibratedSeverity,
+            {
+              altitudeDeviation: detectedFeatures.avgAltitude as number | undefined,
+              speedDeviation: detectedFeatures.avgSpeed as number | undefined,
+              patternUnusual: deviation.type === 'pattern',
+              regionUnusual: deviation.type === 'route',
+              timeUnusual: deviation.type === 'timing',
+              trackErratic: false,
+            }
+          );
+
+          await createExplanation(
+            anomaly.id,
+            'aircraft',
+            aircraftId,
+            'anomaly',
+            {
+              finalScore: calibratedSeverity,
+              factors: explainData.factors,
+              topFeatures: explainData.topFeatures,
+            }
+          );
+
+          // Record prediction outcome for calibration training
+          await recordPredictionOutcome(
+            'anomaly_detection',
+            'aircraft',
+            aircraftId,
+            deviation.severity,
+            undefined,
+            calibratedSeverity
+          );
         }
       }
 

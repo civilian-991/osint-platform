@@ -5,11 +5,14 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import type { PositionLatest, MilitaryCategory } from '@/lib/types/aircraft';
 import type { SSEConnectionStatus } from '@/hooks/useSSEPositions';
+import type { GeofenceWithStats } from '@/lib/types/geofence';
 import { getMilitaryCategoryColor, getMilitaryCategoryLabel } from '@/lib/utils/military-db';
 import { formatAltitude, formatSpeed } from '@/lib/utils/geo';
 import { fetchAircraftTrack, trackToCoordinates, type AircraftTrack } from '@/lib/api/tracks';
 import ConnectionStatus from './ConnectionStatus';
 import { StrikeOverlay, StrikeDetailPanel } from './StrikeOverlay';
+import GeofenceOverlay from './GeofenceOverlay';
+import GeofenceDrawTool from './GeofenceDrawTool';
 import type { StrikeEvent } from '@/lib/services/strike-tracker';
 
 interface AircraftMapProps {
@@ -22,6 +25,13 @@ interface AircraftMapProps {
   lastUpdate?: Date | null;
   onReconnect?: () => void;
   strikesEnabled?: boolean;
+  // Geofence props
+  geofences?: GeofenceWithStats[];
+  selectedGeofenceId?: string | null;
+  onGeofenceClick?: (geofence: GeofenceWithStats) => void;
+  isDrawingGeofence?: boolean;
+  onGeofenceDrawn?: (coordinates: [number, number][]) => void;
+  onGeofenceDrawCancel?: () => void;
 }
 
 // Middle East center
@@ -94,6 +104,12 @@ export default function AircraftMap({
   lastUpdate,
   onReconnect,
   strikesEnabled = false,
+  geofences = [],
+  selectedGeofenceId,
+  onGeofenceClick,
+  isDrawingGeofence = false,
+  onGeofenceDrawn,
+  onGeofenceDrawCancel,
 }: AircraftMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -582,6 +598,35 @@ export default function AircraftMap({
           strike={selectedStrike}
           onClose={() => setSelectedStrike(null)}
         />
+      )}
+
+      {/* Geofence overlay */}
+      {mapLoaded && geofences.length > 0 && (
+        <GeofenceOverlay
+          map={map.current}
+          geofences={geofences}
+          selectedGeofenceId={selectedGeofenceId}
+          onGeofenceClick={onGeofenceClick}
+        />
+      )}
+
+      {/* Geofence drawing tool */}
+      {mapLoaded && (
+        <GeofenceDrawTool
+          map={map.current}
+          isDrawing={isDrawingGeofence}
+          onDrawCreate={onGeofenceDrawn || (() => {})}
+          onDrawCancel={onGeofenceDrawCancel}
+        />
+      )}
+
+      {/* Drawing mode indicator */}
+      {isDrawingGeofence && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 glass rounded-lg px-4 py-2 text-sm">
+          <span className="text-primary font-medium">Drawing Mode</span>
+          <span className="text-muted-foreground ml-2">Click to add points, close polygon to finish</span>
+          <span className="text-muted-foreground ml-2">(Press Esc to cancel)</span>
+        </div>
       )}
     </div>
   );

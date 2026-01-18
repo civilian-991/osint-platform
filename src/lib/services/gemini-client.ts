@@ -1,5 +1,10 @@
 import { createHash } from 'crypto';
 import { execute, queryOne, query } from '@/lib/db';
+import {
+  getPrompt,
+  logExecution,
+  type PromptExecutionResult,
+} from './prompt-registry';
 import type {
   GeminiModel,
   GeminiGenerateRequest,
@@ -170,6 +175,85 @@ export class GeminiClient {
     }
 
     return results;
+  }
+
+  /**
+   * Generate content using a versioned prompt from the registry
+   * Supports A/B testing and automatic logging
+   */
+  async generateWithVersionedPrompt(
+    promptKey: string,
+    variables: Record<string, unknown>,
+    options: {
+      model?: GeminiModel;
+      temperature?: number;
+      maxTokens?: number;
+      jsonMode?: boolean;
+      taskId?: string;
+    } = {}
+  ): Promise<GeminiGenerateResponse & { promptVersion?: number }> {
+    if (!this.enabled) {
+      throw new Error('Gemini client is not enabled.');
+    }
+
+    const startTime = Date.now();
+    let promptExecution: PromptExecutionResult | null = null;
+
+    try {
+      // Get versioned prompt with A/B selection
+      promptExecution = await getPrompt(promptKey, variables);
+
+      if (!promptExecution) {
+        // Fall back to direct prompt if not in registry
+        console.warn(`Prompt key '${promptKey}' not found in registry, using fallback`);
+        return this.generateContent({
+          prompt: JSON.stringify(variables),
+          model: options.model,
+          temperature: options.temperature,
+          maxTokens: options.maxTokens,
+          jsonMode: options.jsonMode,
+        });
+      }
+
+      // Generate content with the versioned prompt
+      const response = await this.generateContent({
+        prompt: promptExecution.renderedPrompt,
+        model: options.model,
+        temperature: options.temperature,
+        maxTokens: options.maxTokens,
+        jsonMode: options.jsonMode,
+      });
+
+      const latencyMs = Date.now() - startTime;
+
+      // Log the execution for A/B analysis
+      await logExecution(promptExecution.versionId, {
+        taskId: options.taskId,
+        inputTokens: Math.ceil(promptExecution.renderedPrompt.length / 4),
+        outputTokens: response.tokens_used,
+        latencyMs,
+        success: true,
+      });
+
+      return {
+        ...response,
+        promptVersion: promptExecution.version,
+      };
+    } catch (error) {
+      const latencyMs = Date.now() - startTime;
+
+      // Log the failure
+      if (promptExecution) {
+        await logExecution(promptExecution.versionId, {
+          taskId: options.taskId,
+          latencyMs,
+          success: false,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+
+      throw error;
+    }
   }
 
   /**

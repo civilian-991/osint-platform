@@ -1,5 +1,6 @@
 import { execute, queryOne, query } from '@/lib/db';
 import { distanceNm } from '@/lib/utils/geo';
+import { getAircraftPrior, applyPriorToProfile } from '@/lib/knowledge/aircraft-priors';
 import type {
   BehavioralProfile,
   PatternDistribution,
@@ -21,6 +22,7 @@ const CONFIG = {
 export class BehavioralProfiler {
   /**
    * Get or create a behavioral profile for an aircraft
+   * For new profiles, applies cold-start priors based on aircraft type
    */
   async getOrCreateProfile(aircraftId: string): Promise<BehavioralProfile | null> {
     try {
@@ -31,13 +33,46 @@ export class BehavioralProfiler {
       );
 
       if (!profile) {
-        // Create new profile
-        profile = await queryOne<BehavioralProfile>(
-          `INSERT INTO aircraft_behavioral_profiles (aircraft_id)
-           VALUES ($1)
-           RETURNING *`,
+        // Get aircraft type for cold-start priors
+        const aircraft = await queryOne<{ type_code: string | null }>(
+          `SELECT type_code FROM aircraft WHERE id = $1`,
           [aircraftId]
         );
+
+        // Create new profile with cold-start priors if available
+        const prior = aircraft?.type_code ? getAircraftPrior(aircraft.type_code) : null;
+
+        if (prior) {
+          // Apply prior knowledge to new profile
+          const priorProfile = applyPriorToProfile(prior);
+
+          profile = await queryOne<BehavioralProfile>(
+            `INSERT INTO aircraft_behavioral_profiles (
+              aircraft_id, typical_patterns, altitude_min, altitude_max, altitude_avg,
+              speed_min, speed_max, speed_avg, sample_count
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING *`,
+            [
+              aircraftId,
+              JSON.stringify(priorProfile.typical_patterns),
+              priorProfile.altitude_min,
+              priorProfile.altitude_max,
+              priorProfile.altitude_avg,
+              priorProfile.speed_min,
+              priorProfile.speed_max,
+              priorProfile.speed_avg,
+              3, // Treat priors as equivalent to 3 observations
+            ]
+          );
+        } else {
+          // Create blank profile
+          profile = await queryOne<BehavioralProfile>(
+            `INSERT INTO aircraft_behavioral_profiles (aircraft_id)
+             VALUES ($1)
+             RETURNING *`,
+            [aircraftId]
+          );
+        }
       }
 
       return profile || null;

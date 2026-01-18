@@ -5,6 +5,7 @@ import { embeddingService } from '@/lib/services/embedding-service';
 import { intelligenceEngine } from '@/lib/services/intelligence-engine';
 import { behavioralProfiler } from '@/lib/services/behavioral-profiler';
 import { formationDetector } from '@/lib/services/formation-detector';
+import { parallelMapSettled, withTimeout } from '@/lib/utils/concurrency';
 import type { MLTask, MLTaskType, PositionData } from '@/lib/types/ml';
 
 // Verify cron secret for security
@@ -26,8 +27,9 @@ function verifyCronSecret(request: NextRequest): boolean {
 
 // Configuration
 const CONFIG = {
-  maxTasksPerRun: 10,
-  taskTimeout: 30000, // 30 seconds per task
+  maxTasksPerRun: 30,      // Increased from 10 to 30
+  concurrentTasks: 5,      // Process 5 tasks in parallel
+  taskTimeout: 30000,      // 30 seconds per task
 };
 
 export async function GET(request: NextRequest) {
@@ -48,60 +50,103 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let processedCount = 0;
-    let errorCount = 0;
     const results: Array<{ taskId: string; taskType: string; success: boolean; error?: string }> = [];
 
-    // Process tasks up to the limit
-    for (let i = 0; i < CONFIG.maxTasksPerRun; i++) {
-      // Get next task from queue
-      const taskResult = await queryOne<{
-        id: string;
-        task_type: MLTaskType;
-        entity_type: string;
-        entity_id: string;
-        payload: Record<string, unknown>;
-        priority: number;
-        attempts: number;
-      }>(`SELECT * FROM get_next_ml_task()`);
+    // Fetch multiple tasks at once for parallel processing
+    const tasks = await query<{
+      id: string;
+      task_type: MLTaskType;
+      entity_type: string;
+      entity_id: string;
+      payload: Record<string, unknown>;
+      priority: number;
+      attempts: number;
+    }>(
+      `WITH claimed_tasks AS (
+        SELECT id FROM ml_task_queue
+        WHERE status = 'pending'
+        AND scheduled_for <= NOW()
+        ORDER BY priority DESC, created_at ASC
+        LIMIT $1
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE ml_task_queue q
+      SET status = 'processing', started_at = NOW()
+      FROM claimed_tasks c
+      WHERE q.id = c.id
+      RETURNING q.id, q.task_type, q.entity_type, q.entity_id, q.payload, q.priority, q.attempts`,
+      [CONFIG.maxTasksPerRun]
+    );
 
-      if (!taskResult) {
-        // No more tasks to process
-        break;
-      }
-
-      const task = taskResult;
-      let success = false;
-      let error: string | undefined;
-
+    if (tasks.length === 0) {
+      // No tasks to process, still run formation detection
       try {
-        // Process task based on type
-        success = await processTask(task);
-      } catch (taskError) {
-        error = taskError instanceof Error ? taskError.message : 'Unknown error';
-        console.error(`Error processing task ${task.id}:`, taskError);
+        await formationDetector.detectFormations();
+        await formationDetector.deactivateStaleFormations();
+      } catch (formationError) {
+        console.error('Error in formation detection:', formationError);
       }
 
-      // Complete the task
-      await execute(`SELECT complete_ml_task($1, $2, $3)`, [
-        task.id,
-        success,
-        error || null,
-      ]);
-
-      results.push({
-        taskId: task.id,
-        taskType: task.task_type,
-        success,
-        error,
+      return NextResponse.json({
+        success: true,
+        message: 'No tasks in queue',
+        stats: { processed: 0, errors: 0, results: [] },
+        timestamp: new Date().toISOString(),
       });
+    }
 
-      if (success) {
-        processedCount++;
+    // Process tasks in parallel with concurrency limit
+    const taskResults = await parallelMapSettled(
+      tasks,
+      async (task) => {
+        let success = false;
+        let error: string | undefined;
+
+        try {
+          // Process task with timeout
+          success = await withTimeout(
+            processTask(task),
+            CONFIG.taskTimeout,
+            `Task ${task.id} timed out after ${CONFIG.taskTimeout}ms`
+          );
+        } catch (taskError) {
+          error = taskError instanceof Error ? taskError.message : 'Unknown error';
+          console.error(`Error processing task ${task.id}:`, taskError);
+        }
+
+        // Complete the task
+        await execute(`SELECT complete_ml_task($1, $2, $3)`, [
+          task.id,
+          success,
+          error || null,
+        ]);
+
+        return {
+          taskId: task.id,
+          taskType: task.task_type,
+          success,
+          error,
+        };
+      },
+      CONFIG.concurrentTasks
+    );
+
+    // Collect results
+    for (const result of taskResults) {
+      if (result.status === 'fulfilled') {
+        results.push(result.value);
       } else {
-        errorCount++;
+        results.push({
+          taskId: 'unknown',
+          taskType: 'unknown',
+          success: false,
+          error: result.reason.message,
+        });
       }
     }
+
+    const processedCount = results.filter((r) => r.success).length;
+    const errorCount = results.filter((r) => !r.success).length;
 
     // Also run formation detection periodically
     try {

@@ -4,3 +4,4 @@ export * from './correlation';
 export * from './watchlist';
 export * from './preferences';
 export * from './ml';
+export * from './geofence';

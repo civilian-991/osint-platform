@@ -1,6 +1,13 @@
 import { execute, queryOne, query } from '@/lib/db';
 import { distanceNm, bearing } from '@/lib/utils/geo';
 import { geminiClient } from './gemini-client';
+import {
+  detectFormationPattern,
+  scoreFormationMatch,
+  getFormationPattern,
+  FORMATION_PATTERNS,
+  type FormationPattern,
+} from '@/lib/knowledge/formation-patterns';
 import type {
   FormationDetection,
   FormationType,
@@ -683,6 +690,102 @@ export class FormationDetector {
       console.error('Error fetching formations for aircraft:', error);
       return [];
     }
+  }
+
+  /**
+   * Enhanced formation detection using pattern library
+   * Analyzes aircraft group against known formation patterns
+   */
+  async detectWithPatternLibrary(
+    aircraft: Array<{
+      aircraft_id: string;
+      latitude: number;
+      longitude: number;
+      altitude: number | null;
+      ground_speed: number | null;
+      track: number | null;
+      type_code: string | null;
+    }>
+  ): Promise<{
+    pattern: FormationPattern | null;
+    score: number;
+    factors: Record<string, number>;
+    threatLevel: string;
+    tacticalSignificance: string;
+  } | null> {
+    if (aircraft.length < 2) {
+      return null;
+    }
+
+    // Calculate formation metrics
+    const geometry = this.calculateFormationGeometry(aircraft);
+
+    // Calculate average spacing
+    let totalDistance = 0;
+    let pairCount = 0;
+    for (let i = 0; i < aircraft.length; i++) {
+      for (let j = i + 1; j < aircraft.length; j++) {
+        totalDistance += distanceNm(
+          aircraft[i].latitude,
+          aircraft[i].longitude,
+          aircraft[j].latitude,
+          aircraft[j].longitude
+        );
+        pairCount++;
+      }
+    }
+    const avgSpacingNm = pairCount > 0 ? totalDistance / pairCount : 0;
+
+    // Calculate speed differences
+    const speeds = aircraft
+      .map((a) => a.ground_speed)
+      .filter((s): s is number => s !== null);
+    const maxSpeedDiff = speeds.length > 1
+      ? Math.max(...speeds) - Math.min(...speeds)
+      : 0;
+
+    // Calculate heading variance
+    const headings = aircraft
+      .map((a) => a.track)
+      .filter((t): t is number => t !== null);
+    let headingVariance = 0;
+    if (headings.length > 1) {
+      const avgHeading = headings.reduce((a, b) => a + b, 0) / headings.length;
+      headingVariance = Math.sqrt(
+        headings.reduce((sum, h) => {
+          let diff = Math.abs(h - avgHeading);
+          if (diff > 180) diff = 360 - diff;
+          return sum + diff * diff;
+        }, 0) / headings.length
+      );
+    }
+
+    // Get aircraft types
+    const aircraftTypes = aircraft
+      .map((a) => a.type_code)
+      .filter((t): t is string => t !== null);
+
+    // Use pattern library detection
+    const result = detectFormationPattern({
+      aircraftCount: aircraft.length,
+      avgSpacingNm,
+      maxAltitudeDiff: (geometry.altitudeBandHigh || 0) - (geometry.altitudeBandLow || 0),
+      maxSpeedDiff,
+      headingVariance,
+      aircraftTypes,
+    });
+
+    if (!result.pattern) {
+      return null;
+    }
+
+    return {
+      pattern: result.pattern,
+      score: result.score,
+      factors: result.factors,
+      threatLevel: result.pattern.threatLevel,
+      tacticalSignificance: result.pattern.tacticalSignificance,
+    };
   }
 
   /**
