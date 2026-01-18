@@ -38,7 +38,7 @@ export default function NewsCard({
   mlData,
 }: NewsCardProps) {
   const extendedNews = news as ExtendedNewsEvent;
-  const isTelegram = extendedNews._isTelegram || news.source_domain === 't.me';
+  const isTelegram = extendedNews._isTelegram || extendedNews.source_domain === 't.me';
 
   const publishedAgo = formatDistanceToNow(new Date(news.published_at), {
     addSuffix: true,
