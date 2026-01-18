@@ -96,16 +96,19 @@ function detectCountries(text: string): string[] {
   return countries;
 }
 
-// Extract basic entities from text
-function extractBasicEntities(text: string): Array<{ name: string; type: string }> {
-  if (!text) return [];
-  const entities: Array<{ name: string; type: string }> = [];
+// Entity type from NewsEntity
+type EntityType = 'person' | 'organization' | 'location' | 'aircraft' | 'military' | 'event';
 
-  // Military terms
-  const militaryPatterns = [
+// Extract basic entities from text
+function extractBasicEntities(text: string): Array<{ name: string; type: EntityType }> {
+  if (!text) return [];
+  const entities: Array<{ name: string; type: EntityType }> = [];
+
+  // Military terms - using only valid EntityType values
+  const militaryPatterns: Array<{ pattern: RegExp; type: EntityType }> = [
     { pattern: /F-?35|F-?16|F-?15|طائرة|aircraft/gi, type: 'aircraft' },
     { pattern: /drone|مسيرة|درون|UAV/gi, type: 'aircraft' },
-    { pattern: /missile|صاروخ|rocket/gi, type: 'weapon' },
+    { pattern: /missile|صاروخ|rocket/gi, type: 'military' },
     { pattern: /airstrike|غارة|قصف|strike/gi, type: 'military' },
     { pattern: /IDF|جيش|military|army/gi, type: 'military' },
     { pattern: /Hezbollah|حزب الله/gi, type: 'organization' },
