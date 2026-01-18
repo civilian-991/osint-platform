@@ -22,6 +22,7 @@ interface AircraftMapProps {
 // Middle East center
 const DEFAULT_CENTER: [number, number] = [42, 30];
 const DEFAULT_ZOOM = 4;
+const MAX_TRAIL_POINTS = 50; // Maximum points to keep in trail
 
 export default function AircraftMap({
   positions,
@@ -36,6 +37,9 @@ export default function AircraftMap({
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
+
+  // Track position history for trails
+  const positionHistory = useRef<Map<string, Array<[number, number]>>>(new Map());
 
   // Initialize map
   useEffect(() => {
@@ -67,15 +71,86 @@ export default function AircraftMap({
       if (showRegions && map.current) {
         addRegionsLayer(map.current);
       }
+
+      // Initialize trails source and layer
+      if (map.current) {
+        initializeTrailsLayer(map.current);
+      }
     });
 
     return () => {
       markers.current.forEach((marker) => marker.remove());
       markers.current.clear();
+      positionHistory.current.clear();
       map.current?.remove();
       map.current = null;
     };
   }, [showRegions]);
+
+  // Initialize trails layer
+  const initializeTrailsLayer = useCallback((mapInstance: mapboxgl.Map) => {
+    // Source for all aircraft trails
+    mapInstance.addSource('aircraft-trails', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: [],
+      },
+    });
+
+    // Layer for non-selected aircraft trails (subtle)
+    mapInstance.addLayer({
+      id: 'aircraft-trails-bg',
+      type: 'line',
+      source: 'aircraft-trails',
+      filter: ['!=', ['get', 'selected'], true],
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round',
+      },
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 1.5,
+        'line-opacity': 0.3,
+      },
+    });
+
+    // Layer for selected aircraft trail (prominent)
+    mapInstance.addLayer({
+      id: 'aircraft-trails-selected',
+      type: 'line',
+      source: 'aircraft-trails',
+      filter: ['==', ['get', 'selected'], true],
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round',
+      },
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 3,
+        'line-opacity': 0.8,
+        'line-blur': 1,
+      },
+    });
+
+    // Glow effect for selected trail
+    mapInstance.addLayer({
+      id: 'aircraft-trails-glow',
+      type: 'line',
+      source: 'aircraft-trails',
+      filter: ['==', ['get', 'selected'], true],
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round',
+      },
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 8,
+        'line-opacity': 0.2,
+        'line-blur': 3,
+      },
+    }, 'aircraft-trails-selected');
+  }, []);
 
   // Add coverage regions as a layer
   const addRegionsLayer = useCallback((mapInstance: mapboxgl.Map) => {
@@ -122,8 +197,8 @@ export default function AircraftMap({
           6, 50,
           10, 100,
         ],
-        'circle-color': 'rgba(14, 165, 233, 0.1)',
-        'circle-stroke-color': 'rgba(14, 165, 233, 0.5)',
+        'circle-color': 'rgba(0, 212, 255, 0.05)',
+        'circle-stroke-color': 'rgba(0, 212, 255, 0.3)',
         'circle-stroke-width': 1,
       },
     });
@@ -138,7 +213,7 @@ export default function AircraftMap({
         'text-offset': [0, 0],
       },
       paint: {
-        'text-color': 'rgba(14, 165, 233, 0.8)',
+        'text-color': 'rgba(0, 212, 255, 0.6)',
         'text-halo-color': 'rgba(0, 0, 0, 0.8)',
         'text-halo-width': 1,
       },
@@ -157,27 +232,84 @@ export default function AircraftMap({
     }
   }, [onAircraftClick]);
 
-  // Update markers when positions change
+  // Update position history and trails
+  const updateTrails = useCallback(() => {
+    if (!map.current || !mapLoaded) return;
+
+    const source = map.current.getSource('aircraft-trails') as mapboxgl.GeoJSONSource;
+    if (!source) return;
+
+    // Build GeoJSON features for all trails
+    const features: GeoJSON.Feature[] = [];
+
+    positionHistory.current.forEach((trail, icaoHex) => {
+      if (trail.length < 2) return;
+
+      const position = positions.find((p) => p.icao_hex === icaoHex);
+      const category = position?.aircraft?.military_category as MilitaryCategory | null;
+      const color = getMilitaryCategoryColor(category);
+      const isSelected = icaoHex === selectedAircraftId;
+
+      features.push({
+        type: 'Feature',
+        properties: {
+          icao_hex: icaoHex,
+          color,
+          selected: isSelected,
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: trail,
+        },
+      });
+    });
+
+    source.setData({
+      type: 'FeatureCollection',
+      features,
+    });
+  }, [positions, selectedAircraftId, mapLoaded]);
+
+  // Update markers and trails when positions change
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
 
     const currentPositionIds = new Set(positions.map((p) => p.icao_hex));
 
-    // Remove markers for aircraft no longer in view
+    // Remove markers and history for aircraft no longer in view
     markers.current.forEach((marker, id) => {
       if (!currentPositionIds.has(id)) {
         marker.remove();
         markers.current.delete(id);
+        positionHistory.current.delete(id);
       }
     });
 
     // Update or create markers for current positions
     positions.forEach((position) => {
       const existingMarker = markers.current.get(position.icao_hex);
+      const coord: [number, number] = [position.longitude, position.latitude];
+
+      // Update position history
+      let trail = positionHistory.current.get(position.icao_hex);
+      if (!trail) {
+        trail = [];
+        positionHistory.current.set(position.icao_hex, trail);
+      }
+
+      // Only add point if it's different from the last one
+      const lastPoint = trail[trail.length - 1];
+      if (!lastPoint || lastPoint[0] !== coord[0] || lastPoint[1] !== coord[1]) {
+        trail.push(coord);
+        // Keep trail length manageable
+        if (trail.length > MAX_TRAIL_POINTS) {
+          trail.shift();
+        }
+      }
 
       if (existingMarker) {
         // Update existing marker position
-        existingMarker.setLngLat([position.longitude, position.latitude]);
+        existingMarker.setLngLat(coord);
 
         // Update rotation if track is available
         if (position.track !== null) {
@@ -194,7 +326,15 @@ export default function AircraftMap({
         markers.current.set(position.icao_hex, marker);
       }
     });
-  }, [positions, mapLoaded, handleMarkerClick]);
+
+    // Update trails visualization
+    updateTrails();
+  }, [positions, mapLoaded, handleMarkerClick, updateTrails]);
+
+  // Update trail styling when selection changes
+  useEffect(() => {
+    updateTrails();
+  }, [selectedAircraftId, updateTrails]);
 
   // Highlight selected aircraft
   useEffect(() => {
@@ -225,8 +365,8 @@ export default function AircraftMap({
       <div ref={mapContainer} className="w-full h-full" />
 
       {/* Legend */}
-      <div className="absolute bottom-4 right-4 bg-card/90 backdrop-blur-sm rounded-lg border border-border p-3 text-xs">
-        <div className="font-semibold mb-2">Aircraft Types</div>
+      <div className="absolute bottom-4 right-4 glass rounded-lg p-3 text-xs">
+        <div className="font-semibold mb-2 text-foreground">Aircraft Types</div>
         <div className="space-y-1">
           {(['tanker', 'awacs', 'isr', 'transport', 'fighter', 'other'] as MilitaryCategory[]).map(
             (category) => (
@@ -235,16 +375,22 @@ export default function AircraftMap({
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: getMilitaryCategoryColor(category) }}
                 />
-                <span>{getMilitaryCategoryLabel(category)}</span>
+                <span className="text-foreground">{getMilitaryCategoryLabel(category)}</span>
               </div>
             )
           )}
         </div>
+        <div className="mt-3 pt-2 border-t border-border/50">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <div className="w-6 h-0.5 bg-primary rounded" />
+            <span>Flight trail</span>
+          </div>
+        </div>
       </div>
 
       {/* Aircraft count */}
-      <div className="absolute top-4 left-4 bg-card/90 backdrop-blur-sm rounded-lg border border-border px-3 py-2 text-sm">
-        <span className="font-semibold">{positions.length}</span>{' '}
+      <div className="absolute top-4 left-4 glass rounded-lg px-3 py-2 text-sm">
+        <span className="font-semibold text-primary">{positions.length}</span>{' '}
         <span className="text-muted-foreground">aircraft tracked</span>
       </div>
 
