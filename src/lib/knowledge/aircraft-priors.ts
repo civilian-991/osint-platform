@@ -578,3 +578,34 @@ export function getIntentPriors(
     patrol: 0.2,
   };
 }
+
+/**
+ * Apply aircraft prior to create initial behavioral profile values
+ * Used for cold-start when no historical data exists
+ */
+export function applyPriorToProfile(prior: AircraftPrior): {
+  typical_patterns: Array<{ pattern: string; frequency: number }>;
+  altitude_min: number;
+  altitude_max: number;
+  altitude_avg: number;
+  speed_min: number;
+  speed_max: number;
+  speed_avg: number;
+} {
+  // Convert typical patterns to frequency distribution
+  const patternCount = prior.typicalPatterns.length;
+  const typical_patterns = prior.typicalPatterns.map((pattern) => ({
+    pattern,
+    frequency: 1.0 / patternCount, // Equal distribution initially
+  }));
+
+  return {
+    typical_patterns,
+    altitude_min: prior.typicalAltitude.min,
+    altitude_max: prior.typicalAltitude.max,
+    altitude_avg: prior.typicalAltitude.cruise,
+    speed_min: prior.typicalSpeed.min,
+    speed_max: prior.typicalSpeed.max,
+    speed_avg: prior.typicalSpeed.cruise,
+  };
+}
