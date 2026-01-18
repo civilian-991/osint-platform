@@ -20,6 +20,8 @@ interface ExtendedNewsEvent extends NewsEvent {
   _isTelegram?: boolean;
   _telegramChannel?: string;
   _views?: number;
+  source_name?: string;
+  source_domain?: string;
 }
 
 interface NewsCardProps {
