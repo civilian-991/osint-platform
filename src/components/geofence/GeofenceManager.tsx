@@ -17,7 +17,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { useGeofences } from '@/hooks/useGeofences';
-import type { GeofenceWithStats, GeofenceAlertWithGeofence } from '@/lib/types/geofence';
+import type { GeofenceWithStats, GeofenceAlertWithGeofence, CreateGeofenceRequest } from '@/lib/types/geofence';
 import { getAlertTypeLabel, formatDwellTime, getAlertSeverityColor } from '@/lib/types/geofence';
 import GeofenceForm from './GeofenceForm';
 import { cn } from '@/lib/utils/cn';
@@ -227,7 +227,7 @@ export default function GeofenceManager({
         <div className="bg-card border border-border rounded-lg p-4">
           <GeofenceForm
             onSubmit={async (data) => {
-              await createGeofence(data);
+              await createGeofence(data as CreateGeofenceRequest);
               setShowCreateForm(false);
             }}
             onCancel={() => setShowCreateForm(false)}
