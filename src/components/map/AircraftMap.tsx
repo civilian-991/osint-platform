@@ -145,6 +145,18 @@ export default function AircraftMap({
     });
   }, []);
 
+  // Store positions in a ref so click handlers can access latest data
+  const positionsRef = useRef<PositionLatest[]>([]);
+  positionsRef.current = positions;
+
+  // Create click handler that looks up current position data
+  const handleMarkerClick = useCallback((icaoHex: string) => {
+    const currentPosition = positionsRef.current.find((p) => p.icao_hex === icaoHex);
+    if (currentPosition && onAircraftClick) {
+      onAircraftClick(currentPosition);
+    }
+  }, [onAircraftClick]);
+
   // Update markers when positions change
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
@@ -176,13 +188,13 @@ export default function AircraftMap({
           }
         }
       } else {
-        // Create new marker
-        const marker = createAircraftMarker(position, onAircraftClick);
+        // Create new marker with icao_hex for lookup
+        const marker = createAircraftMarker(position, handleMarkerClick);
         marker.addTo(map.current!);
         markers.current.set(position.icao_hex, marker);
       }
     });
-  }, [positions, mapLoaded, onAircraftClick]);
+  }, [positions, mapLoaded, handleMarkerClick]);
 
   // Highlight selected aircraft
   useEffect(() => {
@@ -251,7 +263,7 @@ export default function AircraftMap({
 
 function createAircraftMarker(
   position: PositionLatest,
-  onClick?: (aircraft: PositionLatest) => void
+  onClick?: (icaoHex: string) => void
 ): mapboxgl.Marker {
   const category = position.aircraft?.military_category as MilitaryCategory | null;
   const color = getMilitaryCategoryColor(category);
@@ -270,8 +282,10 @@ function createAircraftMarker(
     </div>
   `;
 
+  // Pass icao_hex to click handler so it can look up fresh position data
+  const icaoHex = position.icao_hex;
   el.addEventListener('click', () => {
-    onClick?.(position);
+    onClick?.(icaoHex);
   });
 
   // Create popup
