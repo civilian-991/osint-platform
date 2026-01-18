@@ -10,13 +10,9 @@ import { getCredibilityScore, NEWS_KEYWORDS } from '@/lib/types/news';
 const GDELT_DOC_API = 'https://api.gdeltproject.org/api/v2/doc/doc';
 const GDELT_GEO_API = 'https://api.gdeltproject.org/api/v2/geo/geo';
 
-// Query parameters for Middle East aviation news
-const DEFAULT_QUERY_PARTS = [
-  // Locations
-  '(lebanon OR israel OR syria OR iran OR iraq OR turkey OR egypt OR cyprus OR "gulf states" OR saudi OR uae OR qatar OR bahrain OR kuwait OR jordan)',
-  // Topics
-  'AND (military OR aircraft OR jet OR fighter OR bomber OR tanker OR awacs OR surveillance OR reconnaissance OR airforce OR "air force" OR aviation OR airstrike OR strike OR bombing OR missile OR drone)',
-];
+// Simplified query for Middle East military/aviation news
+// GDELT has query length limits, so keep it concise
+const DEFAULT_QUERY = '(israel OR iran OR syria OR lebanon) AND (military OR airstrike OR aircraft OR missile OR drone)';
 
 export class GDELTService {
   private docApiUrl: string;
@@ -39,7 +35,7 @@ export class GDELTService {
     sort?: 'date' | 'rel';
   }): string {
     const {
-      query = DEFAULT_QUERY_PARTS.join(' '),
+      query = DEFAULT_QUERY,
       mode = 'artlist',
       timespan = '24h',
       maxrecords = 250,
@@ -94,8 +90,7 @@ export class GDELTService {
    * Fetch military aviation news
    */
   async fetchMilitaryAviationNews(timespan = '24h'): Promise<GDELTArticle[]> {
-    const query = DEFAULT_QUERY_PARTS.join(' ');
-    return this.fetchNews({ query, timespan });
+    return this.fetchNews({ query: DEFAULT_QUERY, timespan });
   }
 
   /**
@@ -105,7 +100,7 @@ export class GDELTService {
     region: string,
     timespan = '24h'
   ): Promise<GDELTArticle[]> {
-    const query = `${region} AND (military OR aircraft OR aviation OR airstrike OR strike)`;
+    const query = `${region} AND (military OR airstrike OR aircraft)`;
     return this.fetchNews({ query, timespan });
   }
 

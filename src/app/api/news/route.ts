@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Filter by relevance and convert to our format
-      const filtered = gdeltService.filterByRelevance(articles, 0.3);
+      const filtered = gdeltService.filterByRelevance(articles, 0.1);
       const newsEvents = filtered.map((article) =>
         gdeltService.convertToNewsEvent(article)
       );

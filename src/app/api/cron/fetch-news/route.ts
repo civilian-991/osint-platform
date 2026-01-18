@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   try {
     // Fetch news from GDELT (last 2 hours for more recent data)
     const articles = await fetchMilitaryAviationNews('2h');
-    const filtered = gdeltService.filterByRelevance(articles, 0.3);
+    const filtered = gdeltService.filterByRelevance(articles, 0.1);
 
     console.log(`Fetched ${articles.length} articles, ${filtered.length} relevant`);
 
