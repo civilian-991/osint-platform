@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/server';
+import { stackServerApp } from '@/lib/auth/stack';
 import { redirect } from 'next/navigation';
 import {
   Map,
@@ -8,23 +8,15 @@ import {
   Newspaper,
   Link2,
   Bell,
-  Settings,
   LogOut,
-  Menu,
 } from 'lucide-react';
-
-async function getUser() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-}
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getUser();
+  const user = await stackServerApp.getUser();
 
   if (!user) {
     redirect('/login');
@@ -67,23 +59,23 @@ export default async function DashboardLayout({
           <div className="flex items-center gap-3 mb-3">
             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
               <span className="text-sm font-medium text-primary">
-                {user.email?.[0].toUpperCase()}
+                {(user.primaryEmail || user.displayName || 'U')[0].toUpperCase()}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user.email}</p>
+              <p className="text-sm font-medium truncate">
+                {user.displayName || user.primaryEmail || 'User'}
+              </p>
             </div>
           </div>
 
-          <form action="/auth/signout" method="post">
-            <button
-              type="submit"
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign out
-            </button>
-          </form>
+          <a
+            href="/handler/signout"
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+            Sign out
+          </a>
         </div>
       </aside>
 

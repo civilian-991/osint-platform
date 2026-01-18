@@ -1,5 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { query } from '@/lib/db';
+import { stackServerApp } from '@/lib/auth/stack';
+
+interface CorrelationWithRelations {
+  id: string;
+  news_event_id: string;
+  flight_id: string | null;
+  aircraft_id: string | null;
+  correlation_type: string;
+  confidence_score: number;
+  temporal_proximity: number | null;
+  spatial_proximity: number | null;
+  evidence: Record<string, unknown>;
+  status: string;
+  notes: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+  news_event?: Record<string, unknown>;
+  flight?: Record<string, unknown>;
+  aircraft?: Record<string, unknown>;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,43 +30,34 @@ export async function GET(request: NextRequest) {
     const minConfidence = searchParams.get('minConfidence');
     const limit = parseInt(searchParams.get('limit') || '50', 10);
 
-    const supabase = await createClient();
+    let queryText = `
+      SELECT
+        c.*,
+        row_to_json(n) as news_event,
+        row_to_json(f) as flight,
+        row_to_json(a) as aircraft
+      FROM correlations c
+      LEFT JOIN news_events n ON c.news_event_id = n.id
+      LEFT JOIN flights f ON c.flight_id = f.id
+      LEFT JOIN aircraft a ON c.aircraft_id = a.id
+      WHERE 1=1
+      ${status ? 'AND c.status = $1' : ''}
+      ${minConfidence ? `AND c.confidence_score >= ${status ? '$2' : '$1'}` : ''}
+      ORDER BY c.confidence_score DESC, c.created_at DESC
+      LIMIT ${status && minConfidence ? '$3' : status || minConfidence ? '$2' : '$1'}
+    `;
 
-    let query = supabase
-      .from('correlations')
-      .select(`
-        *,
-        news_events (*),
-        flights (*),
-        aircraft (*)
-      `)
-      .order('confidence_score', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    const params: (string | number)[] = [];
+    if (status) params.push(status);
+    if (minConfidence) params.push(parseFloat(minConfidence));
+    params.push(limit);
 
-    // Filter by status
-    if (status) {
-      query = query.eq('status', status);
-    }
-
-    // Filter by minimum confidence
-    if (minConfidence) {
-      query = query.gte('confidence_score', parseFloat(minConfidence));
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 500 }
-      );
-    }
+    const data = await query<CorrelationWithRelations>(queryText, params);
 
     return NextResponse.json({
       success: true,
       data,
-      count: data?.length || 0,
+      count: data.length,
     });
   } catch (error) {
     console.error('Error in correlations API:', error);
@@ -67,47 +80,51 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    // Get current user from Stack Auth for verification tracking
+    const user = await stackServerApp.getUser();
 
-    // Get current user for verification tracking
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const updateData: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
+    const setClauses: string[] = ['updated_at = NOW()'];
+    const params: (string | null)[] = [id];
+    let paramIndex = 2;
 
     if (status) {
-      updateData.status = status;
+      setClauses.push(`status = $${paramIndex}`);
+      params.push(status);
+      paramIndex++;
     }
 
     if (notes !== undefined) {
-      updateData.notes = notes;
+      setClauses.push(`notes = $${paramIndex}`);
+      params.push(notes);
+      paramIndex++;
     }
 
-    if (verified) {
-      updateData.verified_by = user?.id;
-      updateData.verified_at = new Date().toISOString();
+    if (verified && user) {
+      setClauses.push(`verified_by = $${paramIndex}`);
+      params.push(user.id);
+      paramIndex++;
+      setClauses.push(`verified_at = NOW()`);
     }
 
-    const { data, error } = await supabase
-      .from('correlations')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
+    const queryText = `
+      UPDATE correlations
+      SET ${setClauses.join(', ')}
+      WHERE id = $1
+      RETURNING *
+    `;
 
-    if (error) {
+    const result = await query<CorrelationWithRelations>(queryText, params);
+
+    if (result.length === 0) {
       return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 500 }
+        { success: false, error: 'Correlation not found' },
+        { status: 404 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      data,
+      data: result[0],
     });
   } catch (error) {
     console.error('Error updating correlation:', error);

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { execute, queryOne } from '@/lib/db';
 import { adsbService } from '@/lib/services/adsb';
 import { detectMilitary } from '@/lib/utils/military-db';
-import type { ADSBAircraft } from '@/lib/types/aircraft';
 
 // Verify cron secret for security
 function verifyCronSecret(request: NextRequest): boolean {
@@ -32,8 +31,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = await createServiceClient();
-
     // Fetch military aircraft from ADSB.lol
     const aircraft = await adsbService.fetchMiddleEastMilitary();
     const withPositions = adsbService.filterWithPosition(aircraft);
@@ -49,27 +46,31 @@ export async function GET(request: NextRequest) {
         // Upsert aircraft record
         const detection = detectMilitary(ac);
 
-        const aircraftData = {
-          icao_hex: ac.hex.toUpperCase(),
-          registration: ac.r || null,
-          type_code: ac.t || null,
-          type_description: ac.desc || null,
-          operator: ac.ownOp || null,
-          is_military: detection.isMilitary,
-          military_category: detection.category,
-          updated_at: new Date().toISOString(),
-        };
+        const aircraftRecord = await queryOne<{ id: string }>(
+          `INSERT INTO aircraft (icao_hex, registration, type_code, type_description, operator, is_military, military_category, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+           ON CONFLICT (icao_hex) DO UPDATE SET
+             registration = EXCLUDED.registration,
+             type_code = EXCLUDED.type_code,
+             type_description = EXCLUDED.type_description,
+             operator = EXCLUDED.operator,
+             is_military = EXCLUDED.is_military,
+             military_category = EXCLUDED.military_category,
+             updated_at = NOW()
+           RETURNING id`,
+          [
+            ac.hex.toUpperCase(),
+            ac.r || null,
+            ac.t || null,
+            ac.desc || null,
+            ac.ownOp || null,
+            detection.isMilitary,
+            detection.category,
+          ]
+        );
 
-        const { data: aircraftRecord, error: aircraftError } = await supabase
-          .from('aircraft')
-          .upsert(aircraftData, {
-            onConflict: 'icao_hex',
-          })
-          .select('id')
-          .single();
-
-        if (aircraftError) {
-          console.error(`Error upserting aircraft ${ac.hex}:`, aircraftError);
+        if (!aircraftRecord) {
+          console.error(`Failed to upsert aircraft ${ac.hex}`);
           continue;
         }
 
@@ -77,31 +78,25 @@ export async function GET(request: NextRequest) {
 
         // Insert position record
         if (ac.lat !== undefined && ac.lon !== undefined) {
-          const positionData = {
-            aircraft_id: aircraftRecord.id,
-            icao_hex: ac.hex.toUpperCase(),
-            callsign: ac.flight?.trim() || null,
-            latitude: ac.lat,
-            longitude: ac.lon,
-            altitude: typeof ac.alt_baro === 'number' ? ac.alt_baro : null,
-            ground_speed: ac.gs ? Math.round(ac.gs) : null,
-            track: ac.track ? Math.round(ac.track) : null,
-            vertical_rate: ac.baro_rate || null,
-            squawk: ac.squawk || null,
-            on_ground: ac.alt_baro === 'ground',
-            timestamp: new Date().toISOString(),
-            source: 'adsb.lol',
-          };
-
-          const { error: positionError } = await supabase
-            .from('positions')
-            .insert(positionData);
-
-          if (positionError) {
-            console.error(`Error inserting position for ${ac.hex}:`, positionError);
-          } else {
-            insertedPositions++;
-          }
+          await execute(
+            `INSERT INTO positions (aircraft_id, icao_hex, callsign, latitude, longitude, altitude, ground_speed, track, vertical_rate, squawk, on_ground, timestamp, source)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12)`,
+            [
+              aircraftRecord.id,
+              ac.hex.toUpperCase(),
+              ac.flight?.trim() || null,
+              ac.lat,
+              ac.lon,
+              typeof ac.alt_baro === 'number' ? ac.alt_baro : null,
+              ac.gs ? Math.round(ac.gs) : null,
+              ac.track ? Math.round(ac.track) : null,
+              ac.baro_rate || null,
+              ac.squawk || null,
+              ac.alt_baro === 'ground',
+              'adsb.lol',
+            ]
+          );
+          insertedPositions++;
         }
       } catch (acError) {
         console.error(`Error processing aircraft ${ac.hex}:`, acError);

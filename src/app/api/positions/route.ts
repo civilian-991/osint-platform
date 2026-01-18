@@ -1,5 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { query } from '@/lib/db';
+
+interface PositionWithAircraft {
+  id: string;
+  aircraft_id: string;
+  icao_hex: string;
+  callsign: string | null;
+  latitude: number;
+  longitude: number;
+  altitude: number | null;
+  ground_speed: number | null;
+  track: number | null;
+  vertical_rate: number | null;
+  squawk: string | null;
+  on_ground: boolean;
+  timestamp: string;
+  source: string;
+  aircraft?: {
+    id: string;
+    icao_hex: string;
+    registration: string | null;
+    type_code: string | null;
+    type_description: string | null;
+    operator: string | null;
+    country: string | null;
+    is_military: boolean;
+    military_category: string | null;
+  };
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,92 +39,76 @@ export async function GET(request: NextRequest) {
     const radiusNm = searchParams.get('radius');
     const limit = parseInt(searchParams.get('limit') || '500', 10);
 
-    const supabase = await createClient();
-
     // If requesting latest positions
     if (latest) {
-      let query = supabase
-        .from('positions_latest')
-        .select(`
-          *,
-          aircraft (
-            id,
-            icao_hex,
-            registration,
-            type_code,
-            type_description,
-            operator,
-            country,
-            is_military,
-            military_category
-          )
-        `)
-        .order('timestamp', { ascending: false })
-        .limit(limit);
+      let queryText = `
+        SELECT
+          p.*,
+          json_build_object(
+            'id', a.id,
+            'icao_hex', a.icao_hex,
+            'registration', a.registration,
+            'type_code', a.type_code,
+            'type_description', a.type_description,
+            'operator', a.operator,
+            'country', a.country,
+            'is_military', a.is_military,
+            'military_category', a.military_category
+          ) as aircraft
+        FROM positions_latest p
+        LEFT JOIN aircraft a ON p.aircraft_id = a.id
+        ${icao ? 'WHERE p.icao_hex = $2' : ''}
+        ORDER BY p.timestamp DESC
+        LIMIT $1
+      `;
 
-      // Filter by ICAO if provided
-      if (icao) {
-        query = query.eq('icao_hex', icao.toUpperCase());
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 500 }
-        );
-      }
+      const params = icao ? [limit, icao.toUpperCase()] : [limit];
+      const data = await query<PositionWithAircraft>(queryText, params);
 
       return NextResponse.json({
         success: true,
         data,
-        count: data?.length || 0,
+        count: data.length,
       });
     }
 
     // If requesting positions within radius (uses PostGIS function)
     if (lat && lon && radiusNm) {
-      const { data, error } = await supabase.rpc('get_aircraft_in_radius', {
-        center_lat: parseFloat(lat),
-        center_lon: parseFloat(lon),
-        radius_nm: parseFloat(radiusNm),
-      });
+      const queryText = `
+        SELECT * FROM get_aircraft_in_radius($1, $2, $3)
+      `;
 
-      if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 500 }
-        );
-      }
+      const data = await query<PositionWithAircraft>(queryText, [
+        parseFloat(lat),
+        parseFloat(lon),
+        parseFloat(radiusNm),
+      ]);
 
       return NextResponse.json({
         success: true,
         data,
-        count: data?.length || 0,
+        count: data.length,
       });
     }
 
     // Default: Get historical positions for specific aircraft
     if (icao) {
-      const { data, error } = await supabase
-        .from('positions')
-        .select('*')
-        .eq('icao_hex', icao.toUpperCase())
-        .order('timestamp', { ascending: false })
-        .limit(limit);
+      const queryText = `
+        SELECT * FROM positions
+        WHERE icao_hex = $1
+        ORDER BY timestamp DESC
+        LIMIT $2
+      `;
 
-      if (error) {
-        return NextResponse.json(
-          { success: false, error: error.message },
-          { status: 500 }
-        );
-      }
+      const data = await query<PositionWithAircraft>(queryText, [
+        icao.toUpperCase(),
+        limit,
+      ]);
 
       return NextResponse.json({
         success: true,
         data,
-        count: data?.length || 0,
+        count: data.length,
       });
     }
 

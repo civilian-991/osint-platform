@@ -1,15 +1,14 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { stackServerApp } from '@/lib/auth/stack';
 import Link from 'next/link';
 import { Plane, Map, Newspaper, Link2, ArrowRight } from 'lucide-react';
 
 export default async function HomePage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await stackServerApp.getUser();
 
-  // If logged in, redirect to dashboard
+  // If logged in, show dashboard (middleware will handle this, but double-check)
   if (user) {
-    redirect('/');
+    redirect('/aircraft');
   }
 
   return (

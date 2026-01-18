@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { query } from '@/lib/db';
 import { fetchMiddleEastMilitary } from '@/lib/services/adsb';
+import type { Aircraft } from '@/lib/types/aircraft';
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,31 +22,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Otherwise fetch from database
-    const supabase = await createClient();
+    let queryText = `
+      SELECT * FROM aircraft
+      ${military ? 'WHERE is_military = true' : ''}
+      ORDER BY updated_at DESC
+      LIMIT $1
+    `;
 
-    let query = supabase
-      .from('aircraft')
-      .select('*')
-      .order('updated_at', { ascending: false })
-      .limit(limit);
-
-    if (military) {
-      query = query.eq('is_military', true);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 500 }
-      );
-    }
+    const data = await query<Aircraft>(queryText, [limit]);
 
     return NextResponse.json({
       success: true,
       data,
-      count: data?.length || 0,
+      count: data.length,
       source: 'database',
     });
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { query } from '@/lib/db';
 import { fetchMilitaryAviationNews, gdeltService } from '@/lib/services/gdelt';
+import type { NewsEvent } from '@/lib/types/news';
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,32 +36,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Otherwise fetch from database
-    const supabase = await createClient();
+    let queryText = `
+      SELECT * FROM news_events
+      ${region ? "WHERE $2 = ANY(countries)" : ''}
+      ORDER BY published_at DESC
+      LIMIT $1
+    `;
 
-    let query = supabase
-      .from('news_events')
-      .select('*')
-      .order('published_at', { ascending: false })
-      .limit(limit);
-
-    // Filter by region if provided
-    if (region) {
-      query = query.contains('countries', [region.toLowerCase()]);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 500 }
-      );
-    }
+    const params = region ? [limit, region.toLowerCase()] : [limit];
+    const data = await query<NewsEvent>(queryText, params);
 
     return NextResponse.json({
       success: true,
       data,
-      count: data?.length || 0,
+      count: data.length,
       source: 'database',
     });
   } catch (error) {
