@@ -1,0 +1,78 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-primary: #0ea5e9;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #6b7280;
+  --color-secondary-foreground: #ffffff;
+  --color-accent: #f59e0b;
+  --color-accent-foreground: #ffffff;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-muted: #f3f4f6;
+  --color-muted-foreground: #6b7280;
+  --color-card: #ffffff;
+  --color-card-foreground: #111827;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #111827;
+  --color-border: #e5e7eb;
+  --color-input: #e5e7eb;
+  --color-ring: #0ea5e9;
+  --color-background: #f9fafb;
+  --color-foreground: #111827;
+
+  --color-military: #dc2626;
+  --color-tanker: #f59e0b;
+  --color-awacs: #8b5cf6;
+  --color-isr: #06b6d4;
+  --color-transport: #22c55e;
+  --color-fighter: #ef4444;
+
+  --color-confidence-high: #22c55e;
+  --color-confidence-medium: #f59e0b;
+  --color-confidence-low: #ef4444;
+
+  --radius-lg: 0.5rem;
+  --radius-md: 0.375rem;
+  --radius-sm: 0.25rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Mapbox overrides */
+.mapboxgl-popup-content {
+  @apply bg-card text-card-foreground rounded-lg shadow-lg border border-border p-0;
+}
+
+.mapboxgl-popup-close-button {
+  @apply text-muted-foreground hover:text-foreground text-lg p-2;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/30 rounded-full hover:bg-muted-foreground/50;
+}

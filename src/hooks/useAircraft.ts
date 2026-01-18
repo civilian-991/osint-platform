@@ -1,0 +1,107 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import type { PositionLatest } from '@/lib/types/aircraft';
+
+interface UseAircraftOptions {
+  live?: boolean;
+  refreshInterval?: number;
+  military?: boolean;
+}
+
+interface UseAircraftReturn {
+  positions: PositionLatest[];
+  loading: boolean;
+  error: Error | null;
+  refresh: () => Promise<void>;
+}
+
+export function useAircraft(options: UseAircraftOptions = {}): UseAircraftReturn {
+  const { live = false, refreshInterval = 30000, military = true } = options;
+
+  const [positions, setPositions] = useState<PositionLatest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchAircraft = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (live) params.set('live', 'true');
+      if (military) params.set('military', 'true');
+
+      const response = await fetch(`/api/aircraft?${params.toString()}`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch aircraft: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Transform live data to PositionLatest format if needed
+        if (live && result.data) {
+          const transformed = result.data.map((ac: Record<string, unknown>) => ({
+            id: ac.hex,
+            aircraft_id: null,
+            icao_hex: (ac.hex as string).toUpperCase(),
+            callsign: ac.flight?.toString().trim() || null,
+            latitude: ac.lat as number,
+            longitude: ac.lon as number,
+            altitude: typeof ac.alt_baro === 'number' ? ac.alt_baro : null,
+            ground_speed: ac.gs ? Math.round(ac.gs as number) : null,
+            track: ac.track ? Math.round(ac.track as number) : null,
+            vertical_rate: (ac.baro_rate as number) || null,
+            squawk: (ac.squawk as string) || null,
+            on_ground: ac.alt_baro === 'ground',
+            timestamp: new Date().toISOString(),
+            source: 'adsb.lol',
+            aircraft: {
+              id: ac.hex,
+              icao_hex: (ac.hex as string).toUpperCase(),
+              registration: (ac.r as string) || null,
+              type_code: (ac.t as string) || null,
+              type_description: (ac.desc as string) || null,
+              operator: (ac.ownOp as string) || null,
+              country: null,
+              is_military: (ac.mil as boolean) === true,
+              military_category: null,
+              watchlist_category: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          }));
+          setPositions(transformed);
+        } else {
+          setPositions(result.data || []);
+        }
+        setError(null);
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  }, [live, military]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchAircraft();
+  }, [fetchAircraft]);
+
+  // Refresh interval
+  useEffect(() => {
+    if (refreshInterval <= 0) return;
+
+    const interval = setInterval(fetchAircraft, refreshInterval);
+    return () => clearInterval(interval);
+  }, [fetchAircraft, refreshInterval]);
+
+  return {
+    positions,
+    loading,
+    error,
+    refresh: fetchAircraft,
+  };
+}
