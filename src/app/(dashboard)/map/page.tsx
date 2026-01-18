@@ -5,10 +5,10 @@ import dynamic from 'next/dynamic';
 import { useAircraft } from '@/hooks/useAircraft';
 import { useFormations } from '@/hooks/useAircraftML';
 import AircraftList from '@/components/aircraft/AircraftList';
-import SmartAlertsPanel from '@/components/alerts/SmartAlertsPanel';
+import IntelAlertPanel from '@/components/alerts/IntelAlertPanel';
 import { MLDashboard } from '@/components/ml';
 import type { PositionLatest } from '@/lib/types/aircraft';
-import { RefreshCw, Wifi, WifiOff, Radio, Brain, Bell } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, Radio, Brain, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 // Dynamically import map to avoid SSR issues with Mapbox
@@ -73,7 +73,7 @@ export default function MapPage() {
             ML
           </button>
 
-          {/* Alerts Toggle */}
+          {/* Intel Toggle */}
           <button
             onClick={() => setShowAlertsPanel(!showAlertsPanel)}
             className={cn(
@@ -83,8 +83,8 @@ export default function MapPage() {
                 : 'text-foreground hover:bg-muted/50'
             )}
           >
-            <Bell className="h-4 w-4" />
-            Alerts
+            <Shield className="h-4 w-4" />
+            Intel
           </button>
 
           <button
@@ -145,10 +145,10 @@ export default function MapPage() {
 
       {/* Sidebar */}
       <div className="w-80 border-l border-border/50 bg-card/50 backdrop-blur-sm flex flex-col overflow-hidden">
-        {/* Smart Alerts Panel */}
+        {/* Intelligence Alerts Panel */}
         {showAlertsPanel && (
-          <div className="border-b border-border/50 max-h-[40%] overflow-hidden">
-            <SmartAlertsPanel maxAlerts={5} />
+          <div className="border-b border-border/50 max-h-[50%] overflow-hidden">
+            <IntelAlertPanel />
           </div>
         )}
 
