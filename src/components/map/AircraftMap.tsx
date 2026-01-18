@@ -22,7 +22,62 @@ interface AircraftMapProps {
 // Middle East center
 const DEFAULT_CENTER: [number, number] = [42, 30];
 const DEFAULT_ZOOM = 4;
-const MAX_TRAIL_POINTS = 50; // Maximum points to keep in trail
+const MAX_TRAIL_POINTS = 200; // Maximum points to keep in trail
+const TRAIL_STORAGE_KEY = 'aircraft-trails';
+const TRAIL_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Trail data structure with timestamps
+interface TrailPoint {
+  coord: [number, number];
+  timestamp: number;
+}
+
+interface StoredTrails {
+  [icaoHex: string]: TrailPoint[];
+}
+
+// Load trails from localStorage
+function loadTrailsFromStorage(): Map<string, TrailPoint[]> {
+  if (typeof window === 'undefined') return new Map();
+
+  try {
+    const stored = localStorage.getItem(TRAIL_STORAGE_KEY);
+    if (!stored) return new Map();
+
+    const data: StoredTrails = JSON.parse(stored);
+    const now = Date.now();
+    const trails = new Map<string, TrailPoint[]>();
+
+    // Filter out old data
+    for (const [icao, points] of Object.entries(data)) {
+      const validPoints = points.filter(p => now - p.timestamp < TRAIL_MAX_AGE_MS);
+      if (validPoints.length > 0) {
+        trails.set(icao, validPoints);
+      }
+    }
+
+    return trails;
+  } catch {
+    return new Map();
+  }
+}
+
+// Save trails to localStorage
+function saveTrailsToStorage(trails: Map<string, TrailPoint[]>) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const data: StoredTrails = {};
+    trails.forEach((points, icao) => {
+      // Only save recent points
+      const now = Date.now();
+      data[icao] = points.filter(p => now - p.timestamp < TRAIL_MAX_AGE_MS);
+    });
+    localStorage.setItem(TRAIL_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // localStorage might be full or unavailable
+  }
+}
 
 export default function AircraftMap({
   positions,
@@ -38,8 +93,17 @@ export default function AircraftMap({
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
 
-  // Track position history for trails
-  const positionHistory = useRef<Map<string, Array<[number, number]>>>(new Map());
+  // Track position history for trails - load from localStorage on init
+  const positionHistory = useRef<Map<string, TrailPoint[]>>(new Map());
+  const trailsInitialized = useRef(false);
+
+  // Load trails from localStorage on mount
+  useEffect(() => {
+    if (!trailsInitialized.current) {
+      positionHistory.current = loadTrailsFromStorage();
+      trailsInitialized.current = true;
+    }
+  }, []);
 
   // Initialize map
   useEffect(() => {
@@ -242,8 +306,11 @@ export default function AircraftMap({
     // Build GeoJSON features for all trails
     const features: GeoJSON.Feature[] = [];
 
-    positionHistory.current.forEach((trail, icaoHex) => {
-      if (trail.length < 2) return;
+    positionHistory.current.forEach((trailPoints, icaoHex) => {
+      if (trailPoints.length < 2) return;
+
+      // Extract coordinates from trail points
+      const coordinates = trailPoints.map(p => p.coord);
 
       const position = positions.find((p) => p.icao_hex === icaoHex);
       const category = position?.aircraft?.military_category as MilitaryCategory | null;
@@ -259,7 +326,7 @@ export default function AircraftMap({
         },
         geometry: {
           type: 'LineString',
-          coordinates: trail,
+          coordinates,
         },
       });
     });
@@ -275,13 +342,14 @@ export default function AircraftMap({
     if (!map.current || !mapLoaded) return;
 
     const currentPositionIds = new Set(positions.map((p) => p.icao_hex));
+    const now = Date.now();
 
-    // Remove markers and history for aircraft no longer in view
+    // Remove markers for aircraft no longer in view (but keep trail history)
     markers.current.forEach((marker, id) => {
       if (!currentPositionIds.has(id)) {
         marker.remove();
         markers.current.delete(id);
-        positionHistory.current.delete(id);
+        // Don't delete trail history - it persists
       }
     });
 
@@ -290,7 +358,7 @@ export default function AircraftMap({
       const existingMarker = markers.current.get(position.icao_hex);
       const coord: [number, number] = [position.longitude, position.latitude];
 
-      // Update position history
+      // Update position history with timestamp
       let trail = positionHistory.current.get(position.icao_hex);
       if (!trail) {
         trail = [];
@@ -299,8 +367,8 @@ export default function AircraftMap({
 
       // Only add point if it's different from the last one
       const lastPoint = trail[trail.length - 1];
-      if (!lastPoint || lastPoint[0] !== coord[0] || lastPoint[1] !== coord[1]) {
-        trail.push(coord);
+      if (!lastPoint || lastPoint.coord[0] !== coord[0] || lastPoint.coord[1] !== coord[1]) {
+        trail.push({ coord, timestamp: now });
         // Keep trail length manageable
         if (trail.length > MAX_TRAIL_POINTS) {
           trail.shift();
@@ -329,6 +397,9 @@ export default function AircraftMap({
 
     // Update trails visualization
     updateTrails();
+
+    // Save trails to localStorage for persistence
+    saveTrailsToStorage(positionHistory.current);
   }, [positions, mapLoaded, handleMarkerClick, updateTrails]);
 
   // Update trail styling when selection changes
