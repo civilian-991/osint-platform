@@ -423,12 +423,20 @@ export default function AircraftMap({
     const currentPositionIds = new Set(positions.map((p) => p.icao_hex));
     const now = Date.now();
 
-    // Remove markers for aircraft no longer in view (but keep trail history)
+    // Remove markers and trails for aircraft no longer in view
     markers.current.forEach((marker, id) => {
       if (!currentPositionIds.has(id)) {
         marker.remove();
         markers.current.delete(id);
-        // Don't delete trail history - it persists
+        // Also remove trail history for aircraft no longer tracked
+        positionHistory.current.delete(id);
+      }
+    });
+
+    // Clean up orphaned trails (trails without active aircraft)
+    positionHistory.current.forEach((_, id) => {
+      if (!currentPositionIds.has(id)) {
+        positionHistory.current.delete(id);
       }
     });
 
