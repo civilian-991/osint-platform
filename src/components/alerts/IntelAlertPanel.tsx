@@ -63,7 +63,7 @@ const threatColors: Record<string, { bg: string; border: string; text: string; g
 };
 
 const alertTypeIcons: Record<string, typeof AlertTriangle> = {
-  red_alert: AlertOctagon,
+  flash_alert: AlertOctagon,
   formation_alert: Target,
   activity_spike: Zap,
   news_correlation: Newspaper,
@@ -85,7 +85,7 @@ export default function IntelAlertPanel({ className }: { className?: string }) {
       if (alertsData.success) {
         // Filter to only intelligence alerts
         const intelAlerts = alertsData.data.filter((a: IntelAlert) =>
-          ['red_alert', 'formation_alert', 'activity_spike', 'regional_alert', 'news_correlation'].includes(a.alert_type)
+          ['flash_alert', 'formation_alert', 'activity_spike', 'regional_alert', 'news_correlation'].includes(a.alert_type)
         );
         setAlerts(intelAlerts);
       }
@@ -194,7 +194,7 @@ export default function IntelAlertPanel({ className }: { className?: string }) {
           alerts.map((alert) => {
             const Icon = alertTypeIcons[alert.alert_type] || AlertTriangle;
             const isExpanded = expandedAlert === alert.id;
-            const isRedAlert = alert.alert_type === 'red_alert';
+            const isRedAlert = alert.alert_type === 'flash_alert';
             const severityStyle = threatColors[alert.severity];
 
             return (
@@ -225,7 +225,7 @@ export default function IntelAlertPanel({ className }: { className?: string }) {
                         </h4>
                         {isRedAlert && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
-                            RED ALERT
+                            FLASH
                           </span>
                         )}
                       </div>

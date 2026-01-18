@@ -13,7 +13,7 @@ import { geminiClient } from './gemini-client';
 import type { FormationDetection } from '@/lib/types/ml';
 
 export interface IntelligenceAlert {
-  type: 'red_alert' | 'formation_alert' | 'activity_spike' | 'news_correlation' | 'regional_alert';
+  type: 'flash_alert' | 'formation_alert' | 'activity_spike' | 'news_correlation' | 'regional_alert';
   severity: 'critical' | 'high' | 'medium' | 'low';
   title: string;
   description: string;
@@ -441,11 +441,11 @@ Focus on: what's happening, where, and potential significance. Be factual and co
         summary = `Multiple high-priority events detected: ${criticalAlerts.length} alerts across ${regions.join(', ') || 'monitored regions'}. ${allAircraft.length} military aircraft tracked.`;
       }
 
-      // Create composite red alert
-      const redAlert: IntelligenceAlert = {
-        type: 'red_alert',
+      // Create composite flash alert
+      const flashAlert: IntelligenceAlert = {
+        type: 'flash_alert',
         severity: 'critical',
-        title: `RED ALERT: Significant Military Activity`,
+        title: `FLASH: Significant Military Activity`,
         description: summary,
         data: {
           aircraft: allAircraft.slice(0, 15),
@@ -456,8 +456,8 @@ Focus on: what's happening, where, and potential significance. Be factual and co
         },
       };
 
-      // Return red alert first, then individual alerts
-      return [redAlert, ...alerts];
+      // Return flash alert first, then individual alerts
+      return [flashAlert, ...alerts];
     }
 
     return alerts;
