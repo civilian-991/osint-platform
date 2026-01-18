@@ -14,7 +14,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       navigate={router.push}
       replace={router.replace}
       onSessionChange={() => router.refresh()}
-      redirectTo="/"
+      redirectTo="/aircraft"
       Link={Link}
     >
       {children}

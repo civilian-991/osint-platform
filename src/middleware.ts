@@ -14,19 +14,20 @@ export async function middleware(request: NextRequest) {
 
   const isAuthRoute =
     request.nextUrl.pathname.startsWith('/login') ||
-    request.nextUrl.pathname.startsWith('/signup');
+    request.nextUrl.pathname.startsWith('/signup') ||
+    request.nextUrl.pathname.startsWith('/auth');
 
-  // Redirect to login if accessing protected route without auth
+  // Redirect to sign-in if accessing protected route without auth
   if (isProtectedRoute && !isAuthenticated) {
     const url = request.nextUrl.clone();
-    url.pathname = '/login';
+    url.pathname = '/auth/sign-in';
     return NextResponse.redirect(url);
   }
 
   // Redirect to dashboard if already logged in and accessing auth routes
   if (isAuthRoute && isAuthenticated) {
     const url = request.nextUrl.clone();
-    url.pathname = '/';
+    url.pathname = '/aircraft';
     return NextResponse.redirect(url);
   }
 
