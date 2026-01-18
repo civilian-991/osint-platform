@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { telegramFetcher } from '@/lib/services/telegram-fetcher';
+import { strikeTracker } from '@/lib/services/strike-tracker';
 
 // Verify cron secret for security
 function verifyCronSecret(request: NextRequest): boolean {
@@ -30,6 +31,14 @@ export async function GET(request: NextRequest) {
     // Fetch all active channels
     const results = await telegramFetcher.fetchAllChannels();
 
+    // Process messages for strike events
+    let strikesDetected = 0;
+    try {
+      strikesDetected = await strikeTracker.processUnprocessedMessages();
+    } catch (strikeError) {
+      console.error('Error processing strikes:', strikeError);
+    }
+
     // Get stats
     const stats = await telegramFetcher.getStats();
 
@@ -42,6 +51,7 @@ export async function GET(request: NextRequest) {
       channels_processed: results.length,
       messages_fetched: totalFetched,
       new_messages: totalNew,
+      strikes_detected: strikesDetected,
       errors: errors.length,
       results: results.map(r => ({
         channel: r.channel,

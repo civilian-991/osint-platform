@@ -9,6 +9,8 @@ import { getMilitaryCategoryColor, getMilitaryCategoryLabel } from '@/lib/utils/
 import { formatAltitude, formatSpeed } from '@/lib/utils/geo';
 import { fetchAircraftTrack, trackToCoordinates, type AircraftTrack } from '@/lib/api/tracks';
 import ConnectionStatus from './ConnectionStatus';
+import { StrikeOverlay, StrikeDetailPanel } from './StrikeOverlay';
+import type { StrikeEvent } from '@/lib/services/strike-tracker';
 
 interface AircraftMapProps {
   positions: PositionLatest[];
@@ -19,6 +21,7 @@ interface AircraftMapProps {
   connectionStatus?: SSEConnectionStatus;
   lastUpdate?: Date | null;
   onReconnect?: () => void;
+  strikesEnabled?: boolean;
 }
 
 // Middle East center
@@ -90,11 +93,13 @@ export default function AircraftMap({
   connectionStatus,
   lastUpdate,
   onReconnect,
+  strikesEnabled = false,
 }: AircraftMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [selectedStrike, setSelectedStrike] = useState<StrikeEvent | null>(null);
 
   // Full track data for selected aircraft (from OpenSky API)
   const [selectedTrack, setSelectedTrack] = useState<AircraftTrack | null>(null);
@@ -559,6 +564,23 @@ export default function AircraftMap({
           lastUpdate={lastUpdate ?? null}
           onReconnect={onReconnect}
           className="absolute top-4 right-16"
+        />
+      )}
+
+      {/* Strike overlay */}
+      {mapLoaded && (
+        <StrikeOverlay
+          map={map.current}
+          enabled={strikesEnabled}
+          onStrikeSelect={setSelectedStrike}
+        />
+      )}
+
+      {/* Strike detail panel */}
+      {selectedStrike && (
+        <StrikeDetailPanel
+          strike={selectedStrike}
+          onClose={() => setSelectedStrike(null)}
         />
       )}
     </div>
