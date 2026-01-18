@@ -14,35 +14,49 @@ interface TelegramMessage {
   views?: number;
 }
 
+// Extended NewsEvent type for Telegram
+interface TelegramNewsEvent extends NewsEvent {
+  _isTelegram: boolean;
+  _telegramChannel: string;
+  _views?: number;
+  source_name?: string;
+  source_domain?: string;
+}
+
 // Convert Telegram message to NewsEvent format
-function telegramToNewsEvent(msg: TelegramMessage): NewsEvent {
+function telegramToNewsEvent(msg: TelegramMessage): TelegramNewsEvent {
   // Detect severity/category from content
   const content = msg.content?.toLowerCase() || '';
   const isCritical = content.includes('عاجل') || content.includes('breaking') ||
                      content.includes('غارة') || content.includes('قصف');
 
+  const now = new Date().toISOString();
+
   return {
     id: `telegram-${msg.id}`,
-    gdelt_id: null,
+    source: 'social' as const,
+    source_id: `telegram-${msg.channel_username}-${msg.id}`,
     url: `https://t.me/${msg.channel_username}`,
     title: `📡 ${msg.display_name || msg.channel_username}`,
     content: msg.content || '',
-    source_name: msg.display_name || msg.channel_username,
-    source_domain: 't.me',
     published_at: msg.posted_at,
+    fetched_at: now,
     language: detectLanguage(msg.content),
     countries: detectCountries(msg.content),
     locations: [],
     entities: extractBasicEntities(msg.content),
     categories: [msg.category, 'telegram', isCritical ? 'breaking' : 'intel'].filter(Boolean),
-    tone: 0,
+    sentiment_score: null,
     credibility_score: 0.6, // Telegram sources get medium credibility
     image_url: null,
     created_at: msg.posted_at,
+    // Extended fields
     _isTelegram: true,
     _telegramChannel: msg.channel_username,
     _views: msg.views,
-  } as NewsEvent & { _isTelegram: boolean; _telegramChannel: string; _views?: number };
+    source_name: msg.display_name || msg.channel_username,
+    source_domain: 't.me',
+  };
 }
 
 // Simple language detection
@@ -134,7 +148,7 @@ export async function GET(request: NextRequest) {
       );
 
       // Fetch Telegram messages if enabled
-      let telegramEvents: NewsEvent[] = [];
+      let telegramEvents: TelegramNewsEvent[] = [];
       if (includeTelegram) {
         try {
           const telegramMessages = await query<TelegramMessage>(
@@ -172,7 +186,7 @@ export async function GET(request: NextRequest) {
 
     // Otherwise fetch from database (news_events + telegram)
     let newsData: NewsEvent[] = [];
-    let telegramData: NewsEvent[] = [];
+    let telegramData: TelegramNewsEvent[] = [];
 
     // Fetch news events
     const newsQuery = `
