@@ -3,6 +3,111 @@ import { query } from '@/lib/db';
 import { fetchMilitaryAviationNews, gdeltService } from '@/lib/services/gdelt';
 import type { NewsEvent } from '@/lib/types/news';
 
+interface TelegramMessage {
+  id: string;
+  content: string;
+  channel_username: string;
+  display_name: string;
+  posted_at: string;
+  category: string;
+  media_type?: string;
+  views?: number;
+}
+
+// Convert Telegram message to NewsEvent format
+function telegramToNewsEvent(msg: TelegramMessage): NewsEvent {
+  // Detect severity/category from content
+  const content = msg.content?.toLowerCase() || '';
+  const isCritical = content.includes('عاجل') || content.includes('breaking') ||
+                     content.includes('غارة') || content.includes('قصف');
+
+  return {
+    id: `telegram-${msg.id}`,
+    gdelt_id: null,
+    url: `https://t.me/${msg.channel_username}`,
+    title: `📡 ${msg.display_name || msg.channel_username}`,
+    content: msg.content || '',
+    source_name: msg.display_name || msg.channel_username,
+    source_domain: 't.me',
+    published_at: msg.posted_at,
+    language: detectLanguage(msg.content),
+    countries: detectCountries(msg.content),
+    locations: [],
+    entities: extractBasicEntities(msg.content),
+    categories: [msg.category, 'telegram', isCritical ? 'breaking' : 'intel'].filter(Boolean),
+    tone: 0,
+    credibility_score: 0.6, // Telegram sources get medium credibility
+    image_url: null,
+    created_at: msg.posted_at,
+    _isTelegram: true,
+    _telegramChannel: msg.channel_username,
+    _views: msg.views,
+  } as NewsEvent & { _isTelegram: boolean; _telegramChannel: string; _views?: number };
+}
+
+// Simple language detection
+function detectLanguage(text: string): string {
+  if (!text) return 'unknown';
+  // Arabic characters
+  if (/[\u0600-\u06FF]/.test(text)) return 'ar';
+  // Hebrew characters
+  if (/[\u0590-\u05FF]/.test(text)) return 'he';
+  // Cyrillic
+  if (/[\u0400-\u04FF]/.test(text)) return 'ru';
+  return 'en';
+}
+
+// Detect countries from content
+function detectCountries(text: string): string[] {
+  if (!text) return [];
+  const lower = text.toLowerCase();
+  const countries: string[] = [];
+
+  const countryPatterns: Record<string, string[]> = {
+    israel: ['israel', 'israeli', 'إسرائيل', 'اسرائيل', 'الاحتلال'],
+    lebanon: ['lebanon', 'lebanese', 'لبنان', 'لبناني', 'بيروت', 'beirut'],
+    syria: ['syria', 'syrian', 'سوريا', 'سوري', 'دمشق', 'damascus'],
+    iran: ['iran', 'iranian', 'إيران', 'ايران', 'طهران', 'tehran'],
+    gaza: ['gaza', 'غزة', 'palestinian'],
+    iraq: ['iraq', 'iraqi', 'العراق', 'عراق', 'بغداد'],
+    yemen: ['yemen', 'yemeni', 'اليمن', 'يمن', 'صنعاء', 'houthi'],
+  };
+
+  for (const [country, patterns] of Object.entries(countryPatterns)) {
+    if (patterns.some(p => lower.includes(p))) {
+      countries.push(country);
+    }
+  }
+
+  return countries;
+}
+
+// Extract basic entities from text
+function extractBasicEntities(text: string): Array<{ name: string; type: string }> {
+  if (!text) return [];
+  const entities: Array<{ name: string; type: string }> = [];
+
+  // Military terms
+  const militaryPatterns = [
+    { pattern: /F-?35|F-?16|F-?15|طائرة|aircraft/gi, type: 'aircraft' },
+    { pattern: /drone|مسيرة|درون|UAV/gi, type: 'aircraft' },
+    { pattern: /missile|صاروخ|rocket/gi, type: 'weapon' },
+    { pattern: /airstrike|غارة|قصف|strike/gi, type: 'military' },
+    { pattern: /IDF|جيش|military|army/gi, type: 'military' },
+    { pattern: /Hezbollah|حزب الله/gi, type: 'organization' },
+    { pattern: /Hamas|حماس/gi, type: 'organization' },
+  ];
+
+  for (const { pattern, type } of militaryPatterns) {
+    const matches = text.match(pattern);
+    if (matches) {
+      entities.push({ name: matches[0], type });
+    }
+  }
+
+  return entities;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -10,8 +115,9 @@ export async function GET(request: NextRequest) {
     const region = searchParams.get('region');
     const timespan = searchParams.get('timespan') || '24h';
     const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const includeTelegram = searchParams.get('telegram') !== 'false'; // Include by default
 
-    // If live mode, fetch directly from GDELT
+    // If live mode, fetch directly from GDELT + Telegram
     if (live) {
       let articles;
 
@@ -27,29 +133,88 @@ export async function GET(request: NextRequest) {
         gdeltService.convertToNewsEvent(article)
       );
 
+      // Fetch Telegram messages if enabled
+      let telegramEvents: NewsEvent[] = [];
+      if (includeTelegram) {
+        try {
+          const telegramMessages = await query<TelegramMessage>(
+            `SELECT m.id, m.content, c.channel_username, c.display_name, m.posted_at, c.category, m.media_type, m.views
+             FROM telegram_messages m
+             JOIN telegram_channels c ON m.channel_id = c.id
+             WHERE m.posted_at > NOW() - INTERVAL '48 hours'
+             AND m.content IS NOT NULL AND m.content != ''
+             ORDER BY m.posted_at DESC
+             LIMIT $1`,
+            [Math.floor(limit / 2)]
+          );
+          telegramEvents = telegramMessages.map(telegramToNewsEvent);
+        } catch (err) {
+          console.error('Error fetching Telegram messages:', err);
+        }
+      }
+
+      // Merge and sort by timestamp
+      const allEvents = [...newsEvents, ...telegramEvents]
+        .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
+        .slice(0, limit);
+
       return NextResponse.json({
         success: true,
-        data: newsEvents.slice(0, limit),
-        count: newsEvents.length,
-        source: 'gdelt',
+        data: allEvents,
+        count: allEvents.length,
+        stats: {
+          gdelt: newsEvents.length,
+          telegram: telegramEvents.length,
+        },
+        source: 'gdelt+telegram',
       });
     }
 
-    // Otherwise fetch from database
-    let queryText = `
+    // Otherwise fetch from database (news_events + telegram)
+    let newsData: NewsEvent[] = [];
+    let telegramData: NewsEvent[] = [];
+
+    // Fetch news events
+    const newsQuery = `
       SELECT * FROM news_events
       ${region ? "WHERE $2 = ANY(countries)" : ''}
       ORDER BY published_at DESC
       LIMIT $1
     `;
+    const newsParams = region ? [Math.floor(limit / 2), region.toLowerCase()] : [Math.floor(limit / 2)];
+    newsData = await query<NewsEvent>(newsQuery, newsParams);
 
-    const params = region ? [limit, region.toLowerCase()] : [limit];
-    const data = await query<NewsEvent>(queryText, params);
+    // Fetch telegram messages
+    if (includeTelegram) {
+      try {
+        const telegramMessages = await query<TelegramMessage>(
+          `SELECT m.id, m.content, c.channel_username, c.display_name, m.posted_at, c.category, m.media_type, m.views
+           FROM telegram_messages m
+           JOIN telegram_channels c ON m.channel_id = c.id
+           WHERE m.content IS NOT NULL AND m.content != ''
+           ORDER BY m.posted_at DESC
+           LIMIT $1`,
+          [Math.floor(limit / 2)]
+        );
+        telegramData = telegramMessages.map(telegramToNewsEvent);
+      } catch (err) {
+        console.error('Error fetching Telegram messages:', err);
+      }
+    }
+
+    // Merge and sort
+    const allData = [...newsData, ...telegramData]
+      .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime())
+      .slice(0, limit);
 
     return NextResponse.json({
       success: true,
-      data,
-      count: data.length,
+      data: allData,
+      count: allData.length,
+      stats: {
+        news: newsData.length,
+        telegram: telegramData.length,
+      },
       source: 'database',
     });
   } catch (error) {

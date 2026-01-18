@@ -1,6 +1,6 @@
 'use client';
 
-import { ExternalLink, Clock, MapPin, Zap, Brain, Link2 } from 'lucide-react';
+import { ExternalLink, Clock, MapPin, Zap, Brain, Link2, Radio, Eye } from 'lucide-react';
 import type { NewsEvent } from '@/lib/types/news';
 import type { EnhancedEntity } from '@/lib/types/ml';
 import CredibilityBadge from './CredibilityBadge';
@@ -13,6 +13,13 @@ interface EnhancedNewsData {
   corroborationScore?: number;
   corroboratingArticles?: number;
   threatImplication?: number;
+}
+
+// Extended NewsEvent with Telegram fields
+interface ExtendedNewsEvent extends NewsEvent {
+  _isTelegram?: boolean;
+  _telegramChannel?: string;
+  _views?: number;
 }
 
 interface NewsCardProps {
@@ -30,11 +37,20 @@ export default function NewsCard({
   compact = false,
   mlData,
 }: NewsCardProps) {
+  const extendedNews = news as ExtendedNewsEvent;
+  const isTelegram = extendedNews._isTelegram || news.source_domain === 't.me';
+
   const publishedAgo = formatDistanceToNow(new Date(news.published_at), {
     addSuffix: true,
   });
 
-  const domain = new URL(news.url).hostname.replace('www.', '');
+  // Safe domain extraction
+  let domain = 'unknown';
+  try {
+    domain = new URL(news.url).hostname.replace('www.', '');
+  } catch {
+    domain = isTelegram ? 't.me' : news.source_domain || 'unknown';
+  }
 
   // Get credibility color for accent
   const getAccentColor = (score: number) => {
@@ -54,32 +70,60 @@ export default function NewsCard({
           'group relative p-3 rounded-lg cursor-pointer transition-all duration-200',
           isSelected
             ? `bg-primary/10 border-l-2 border-l-primary border border-primary/30 shadow-lg ${accent.glow}`
-            : 'bg-card/50 border border-border/30 hover:bg-card hover:border-border/50'
+            : isTelegram
+              ? 'bg-cyan-500/5 border border-cyan-500/20 hover:bg-cyan-500/10 hover:border-cyan-500/30'
+              : 'bg-card/50 border border-border/30 hover:bg-card hover:border-border/50'
         )}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
+            {/* Source indicator */}
+            <div className="flex items-center gap-1.5 mb-1.5">
+              {isTelegram ? (
+                <Radio className="h-3 w-3 text-cyan-400" />
+              ) : null}
+              <span className={cn(
+                'text-xs font-medium truncate',
+                isTelegram ? 'text-cyan-400' : 'text-muted-foreground'
+              )}>
+                {news.source_name || domain}
+              </span>
+              {extendedNews._views && (
+                <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground/60">
+                  <Eye className="h-2.5 w-2.5" />
+                  {extendedNews._views > 1000 ? `${(extendedNews._views / 1000).toFixed(1)}K` : extendedNews._views}
+                </span>
+              )}
+            </div>
+
+            {/* Title or Content */}
             <h3 className={cn(
-              'text-sm font-medium line-clamp-2 leading-snug transition-colors',
+              'text-sm font-medium leading-snug transition-colors',
+              isTelegram ? 'line-clamp-3' : 'line-clamp-2',
               isSelected ? 'text-foreground' : 'text-foreground/90 group-hover:text-foreground'
             )}>
-              {news.title}
+              {isTelegram && news.content ? news.content : news.title}
             </h3>
+
             <div className="flex items-center gap-2 mt-2">
-              <span className="text-xs font-mono text-muted-foreground truncate max-w-[120px]">
-                {domain}
-              </span>
-              <span className="text-border">·</span>
               <span className="text-xs text-muted-foreground/80">{publishedAgo}</span>
+              {news.countries.length > 0 && (
+                <>
+                  <span className="text-border">·</span>
+                  <span className="text-xs text-primary/70 capitalize truncate">
+                    {news.countries[0]}
+                  </span>
+                </>
+              )}
             </div>
           </div>
-          <CredibilityBadge score={news.credibility_score} showLabel={false} size="sm" />
+          {!isTelegram && <CredibilityBadge score={news.credibility_score} showLabel={false} size="sm" />}
         </div>
 
         {/* Hover indicator */}
         <div className={cn(
           'absolute left-0 top-0 bottom-0 w-0.5 rounded-l transition-all duration-200',
-          isSelected ? 'bg-primary' : 'bg-transparent group-hover:bg-primary/50'
+          isSelected ? 'bg-primary' : isTelegram ? 'bg-cyan-500/50' : 'bg-transparent group-hover:bg-primary/50'
         )} />
       </div>
     );

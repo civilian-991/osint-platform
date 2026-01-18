@@ -23,12 +23,13 @@ const CREDIBILITY_OPTIONS = [
 
 const CATEGORY_OPTIONS = [
   { value: 'all', label: 'All', icon: '◉' },
+  { value: 'telegram', label: 'Telegram', icon: '📡' },
   { value: 'airstrike', label: 'Airstrikes', icon: '💥' },
   { value: 'aircraft', label: 'Aircraft', icon: '✈️' },
   { value: 'missile', label: 'Missiles', icon: '🚀' },
   { value: 'drone', label: 'Drones', icon: '🛸' },
-  { value: 'surveillance', label: 'Intel', icon: '📡' },
-  { value: 'deployment', label: 'Deploy', icon: '🎯' },
+  { value: 'alerts', label: 'Alerts', icon: '🚨' },
+  { value: 'military', label: 'Military', icon: '🎯' },
 ];
 
 export default function NewsFeed({
