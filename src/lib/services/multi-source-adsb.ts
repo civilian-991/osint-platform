@@ -334,15 +334,24 @@ class MultiSourceADSBService {
   }
 
   /**
-   * Try to detect military aircraft that weren't flagged
+   * Validate and detect military aircraft
+   * - Detects military aircraft that weren't flagged
+   * - Also removes false positives (civilian aircraft incorrectly flagged as military)
    */
   private async enrichWithMilitaryDetection(aircraft: Map<string, ADSBAircraft>): Promise<void> {
     for (const [hex, ac] of aircraft) {
-      if (!ac.mil) {
-        const detection = detectMilitary(ac);
-        if (detection.isMilitary) {
-          ac.mil = true;
-        }
+      const detection = detectMilitary(ac);
+
+      // If detection says it's not military, remove the flag (fixes false positives)
+      // If detection says it's military, add the flag
+      ac.mil = detection.isMilitary;
+
+      // Also add the category if detected
+      if (detection.category) {
+        (ac as unknown as Record<string, unknown>)._militaryCategory = detection.category;
+      }
+      if (detection.country) {
+        (ac as unknown as Record<string, unknown>)._militaryCountry = detection.country;
       }
     }
   }

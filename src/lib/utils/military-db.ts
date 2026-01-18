@@ -130,6 +130,134 @@ const MILITARY_CALLSIGN_PATTERNS: RegExp[] = [
   /^BOXER\d/i,    // KC-10
   /^PACK\d/i,     // KC-135
   /^QUID\d/i,     // E-3
+  /^IAF\d/i,      // Israeli Air Force
+  /^IRIAF\d/i,    // Iranian Air Force
+  /^THY\d/i,      // Turkish military (not THY airline)
+  /^TUAF\d/i,     // Turkish Air Force
+  /^UAF\d/i,      // UAE Air Force
+  /^RSAF\d/i,     // Royal Saudi Air Force
+  /^REAF\d/i,     // Royal Emirates Air Force
+  /^QAF\d/i,      // Qatar Air Force
+  /^KAF\d/i,      // Kuwait Air Force
+  /^BAF\d/i,      // Bahrain Air Force
+  /^OAF\d/i,      // Oman Air Force
+  /^IQAF\d/i,     // Iraqi Air Force
+  /^SJAF\d/i,     // Jordanian Air Force
+  /^LAF\d/i,      // Lebanese Air Force
+  /^EAF\d/i,      // Egyptian Air Force
+];
+
+// Callsign prefixes for CIVILIAN airlines (to exclude false positives)
+const CIVILIAN_AIRLINE_PREFIXES: string[] = [
+  'FDB',   // FlyDubai
+  'UAE',   // Emirates
+  'ETD',   // Etihad
+  'QTR',   // Qatar Airways
+  'GFA',   // Gulf Air
+  'KAC',   // Kuwait Airways
+  'SVA',   // Saudia
+  'MEA',   // Middle East Airlines
+  'THY',   // Turkish Airlines
+  'PGT',   // Pegasus
+  'AXB',   // Air Arabia
+  'FJI',   // Fly Jordan
+  'RJA',   // Royal Jordanian
+  'MSR',   // EgyptAir
+  'MSC',   // EgyptAir (alternate)
+  'ELY',   // El Al
+  'IRA',   // Iran Air
+  'IRC',   // Iran Aseman
+  'SYR',   // Syrian Air
+  'LBN',   // Lebanese Airlines
+  'CYP',   // Cyprus Airways
+  'OMA',   // Oman Air
+  'ABY',   // Air Arabia
+  'NIA',   // Nile Air
+  'AEE',   // Aegean
+  'WZZ',   // Wizz Air
+  'RYR',   // Ryanair
+  'EZY',   // EasyJet
+  'DLH',   // Lufthansa
+  'BAW',   // British Airways
+  'AFR',   // Air France
+  'KLM',   // KLM
+  'SWR',   // Swiss
+  'AUA',   // Austrian
+  'THA',   // Thai Airways
+  'SIA',   // Singapore
+  'CPA',   // Cathay Pacific
+  'AAL',   // American
+  'DAL',   // Delta
+  'UAL',   // United
+  'SWA',   // Southwest
+  'FFT',   // Frontier
+  'JBU',   // JetBlue
+  'ASA',   // Alaska
+  'ACA',   // Air Canada
+  'JAL',   // Japan Airlines
+  'ANA',   // All Nippon Airways
+  'CES',   // China Eastern
+  'CSN',   // China Southern
+  'CCA',   // Air China
+  'KAL',   // Korean Air
+  'AAR',   // Asiana
+  'TUI',   // TUI
+  'ICE',   // Icelandair
+  'FIN',   // Finnair
+  'SAS',   // Scandinavian
+  'TAP',   // TAP Portugal
+  'IBE',   // Iberia
+  'VLG',   // Vueling
+  'AZA',   // Alitalia/ITA
+  'ROT',   // TAROM
+  'LOT',   // LOT Polish
+  'CSA',   // Czech Airlines
+  'AFL',   // Aeroflot
+  'TRA',   // Transavia
+  'EWG',   // Eurowings
+  'BEL',   // Brussels Airlines
+  'STW',   // Saudia Cargo (civilian)
+  'LMU',   // Loong Air
+  'AXY',   // Executive jets (often private)
+  'AWG',   // Air Bucharest
+  'ADY',   // Abu Dhabi Aviation
+  'ETH',   // Ethiopian Airlines
+  'KQA',   // Kenya Airways
+  'SAA',   // South African Airways
+  'RAM',   // Royal Air Maroc
+  'TUN',   // Tunisair
+  'ALK',   // SriLankan Airlines
+  'PIA',   // Pakistan International
+  'BIA',   // Royal Brunei
+  'MAS',   // Malaysia Airlines
+  'GIA',   // Garuda Indonesia
+  'VNL',   // VietJet
+  'HVN',   // Vietnam Airlines
+  'CEB',   // Cebu Pacific
+  'PAL',   // Philippine Airlines
+  'AXM',   // AirAsia
+  'AIQ',   // AirAsia India
+  'JST',   // Jetstar
+  'VOZ',   // Virgin Australia
+  'QFA',   // Qantas
+  'ANZ',   // Air New Zealand
+  'FJA',   // Fiji Airways
+  'UAE',   // Emirates (duplicate intentional)
+  // NOTE: UAF = UAE Air Force - do NOT add to civilian list!
+  'NSH',   // NAS Air / FlyNas
+  'SAI',   // Shaheen Air
+  'PHS',   // Philippine Sun
+  'SXS',   // Sun Express
+  'XAX',   // AirAsia X
+  'SKW',   // SkyWest
+  'ENY',   // Envoy Air
+  'PDT',   // Piedmont Airlines
+  'JIA',   // PSA Airlines
+  'RPA',   // Republic Airways
+  'TCX',   // Thomas Cook
+  'MON',   // Monarch
+  'NWG',   // Norwegian
+  'DY',    // Norwegian (alternate)
 ];
 
 // Check if ICAO hex is in military range
@@ -175,6 +303,85 @@ export function isCallsignMilitary(callsign: string | null | undefined): boolean
   return false;
 }
 
+// Check if callsign is a CIVILIAN airline (to exclude false positives)
+export function isCallsignCivilian(callsign: string | null | undefined): boolean {
+  if (!callsign) return false;
+
+  const normalized = callsign.trim().toUpperCase();
+
+  // Check against known civilian airline prefixes
+  for (const prefix of CIVILIAN_AIRLINE_PREFIXES) {
+    if (normalized.startsWith(prefix)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Keywords that indicate civilian operators
+const CIVILIAN_OPERATOR_KEYWORDS = [
+  'AIRLINES', 'AIRWAYS', 'AIRLINE', 'AIRWAY',
+  'AVIATION', 'CARGO', 'FREIGHT', 'EXPRESS',
+  'JET', 'FLY', 'TRAVEL', 'TOUR',
+  'PRIVATE', 'CHARTER', 'EXECUTIVE',
+  'LEASING', 'RENTAL',
+];
+
+// Known civilian operators (check operator field, not callsign)
+const CIVILIAN_OPERATORS = [
+  'FLYDUBAI', 'FLY DUBAI',
+  'EMIRATES', 'EMIRATES AIRLINE',
+  'ETIHAD', 'ETIHAD AIRWAYS',
+  'QATAR', 'QATAR AIRWAYS',
+  'GULF AIR',
+  'KUWAIT AIRWAYS',
+  'SAUDIA', 'SAUDI ARABIAN',
+  'MIDDLE EAST AIRLINES', 'MEA',
+  'TURKISH AIRLINES', 'THY',
+  'PEGASUS',
+  'EGYPTAIR', 'EGYPT AIR',
+  'EL AL', 'ELAL',
+  'IRAN AIR',
+  'ROYAL JORDANIAN',
+  'OMAN AIR',
+  'AIR ARABIA',
+  'JAZEERA AIRWAYS',
+  'FLYNAS', 'NASAIR',
+  'LUFTHANSA',
+  'BRITISH AIRWAYS',
+  'AIR FRANCE',
+  'KLM',
+  'RYANAIR',
+  'EASYJET',
+  'WIZZ AIR',
+  'DELTA', 'AMERICAN AIRLINES', 'UNITED AIRLINES',
+  'SOUTHWEST',
+];
+
+// Check if operator indicates civilian
+export function isOperatorCivilian(operator: string | null | undefined): boolean {
+  if (!operator) return false;
+
+  const normalized = operator.trim().toUpperCase();
+
+  // Check against known civilian operators
+  for (const civOp of CIVILIAN_OPERATORS) {
+    if (normalized.includes(civOp)) {
+      return true;
+    }
+  }
+
+  // Check for civilian keywords
+  for (const keyword of CIVILIAN_OPERATOR_KEYWORDS) {
+    if (normalized.includes(keyword)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Comprehensive military detection
 export function detectMilitary(aircraft: ADSBAircraft): {
   isMilitary: boolean;
@@ -182,48 +389,93 @@ export function detectMilitary(aircraft: ADSBAircraft): {
   country: string | null;
   confidence: 'high' | 'medium' | 'low';
 } {
-  // If ADSB.lol already flagged it as military
-  if (aircraft.mil === true) {
-    const category = getMilitaryCategory(aircraft.t);
+  // FIRST: Check if it's a known civilian airline - these are NEVER military
+  // This catches false positives from upstream APIs that incorrectly flag civilian aircraft
+  if (isCallsignCivilian(aircraft.flight)) {
     return {
-      isMilitary: true,
-      category: category || 'other',
+      isMilitary: false,
+      category: null,
       country: null,
       confidence: 'high',
     };
   }
 
-  // Check ICAO hex range
-  const hexCheck = isHexMilitary(aircraft.hex);
-  if (hexCheck.isMilitary) {
-    const category = getMilitaryCategory(aircraft.t);
+  // Also check operator field for civilian indicators
+  if (isOperatorCivilian(aircraft.ownOp)) {
     return {
-      isMilitary: true,
-      category: category || 'other',
-      country: hexCheck.country || null,
+      isMilitary: false,
+      category: null,
+      country: null,
       confidence: 'high',
     };
   }
 
-  // Check type code
+  // Also check description field which sometimes contains operator info
+  if (isOperatorCivilian(aircraft.desc)) {
+    return {
+      isMilitary: false,
+      category: null,
+      country: null,
+      confidence: 'high',
+    };
+  }
+
+  // Check type code - military aircraft types are reliable indicators
   const category = getMilitaryCategory(aircraft.t);
   if (category) {
+    // But check if operator is civilian (some civilian ops use military-looking type codes)
+    if (!isOperatorCivilian(aircraft.ownOp) && !isOperatorCivilian(aircraft.desc)) {
+      return {
+        isMilitary: true,
+        category,
+        country: null,
+        confidence: 'high',
+      };
+    }
+  }
+
+  // Check callsign for military patterns
+  if (isCallsignMilitary(aircraft.flight)) {
     return {
       isMilitary: true,
-      category,
+      category: category || null,
       country: null,
       confidence: 'medium',
     };
   }
 
-  // Check callsign
-  if (isCallsignMilitary(aircraft.flight)) {
+  // Check ICAO hex range - but ONLY for USA military range (most reliable)
+  // Other countries mix civilian and military in the same hex allocations
+  const hexCheck = isHexMilitary(aircraft.hex);
+  if (hexCheck.isMilitary && hexCheck.country === 'USA') {
     return {
       isMilitary: true,
-      category: null,
-      country: null,
-      confidence: 'low',
+      category: category || 'other',
+      country: 'USA',
+      confidence: 'high',
     };
+  }
+
+  // If upstream flagged as military AND we have supporting evidence (hex or type)
+  if (aircraft.mil === true) {
+    // Only trust upstream mil flag if hex is in a military range
+    if (hexCheck.isMilitary) {
+      return {
+        isMilitary: true,
+        category: category || 'other',
+        country: hexCheck.country || null,
+        confidence: 'medium',
+      };
+    }
+    // Or if there's no civilian indicators at all and no callsign (unknown aircraft)
+    if (!aircraft.flight && !aircraft.ownOp && !aircraft.desc) {
+      return {
+        isMilitary: true,
+        category: category || 'other',
+        country: null,
+        confidence: 'low',
+      };
+    }
   }
 
   return {
