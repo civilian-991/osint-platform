@@ -73,14 +73,14 @@ export default function AircraftList({
   }, [positions]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full glass">
       {/* Header */}
-      <div className="p-4 border-b border-border space-y-3">
+      <div className="p-4 border-b border-border/50 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold flex items-center gap-2">
-            <Plane className="h-5 w-5" />
+          <h2 className="font-semibold text-foreground flex items-center gap-2">
+            <Plane className="h-5 w-5 text-primary" />
             Aircraft
-            <span className="text-muted-foreground font-normal">
+            <span className="text-sm font-normal text-muted-foreground">
               ({filteredPositions.length})
             </span>
           </h2>
@@ -88,14 +88,16 @@ export default function AircraftList({
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
-              'flex items-center gap-1 px-2 py-1 rounded text-sm transition-colors',
-              showFilters ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
+              showFilters
+                ? 'bg-primary/15 text-primary border border-primary/30'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             )}
           >
             <Filter className="h-4 w-4" />
             Filter
             <ChevronDown
-              className={cn('h-4 w-4 transition-transform', showFilters && 'rotate-180')}
+              className={cn('h-4 w-4 transition-transform duration-200', showFilters && 'rotate-180')}
             />
           </button>
         </div>
@@ -108,24 +110,24 @@ export default function AircraftList({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search callsign, ICAO, type..."
-            className="w-full pl-9 pr-3 py-2 bg-background border border-input rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="input-field pl-10"
           />
         </div>
 
         {/* Filters */}
         {showFilters && (
-          <div className="pt-2 space-y-2">
-            <label className="text-xs text-muted-foreground">Category</label>
-            <div className="flex flex-wrap gap-1">
+          <div className="pt-2 space-y-2 animate-slide-up">
+            <label className="text-xs font-medium text-foreground">Category</label>
+            <div className="flex flex-wrap gap-1.5">
               {CATEGORY_OPTIONS.map((option) => (
                 <button
                   key={option.value}
                   onClick={() => setCategoryFilter(option.value)}
                   className={cn(
-                    'px-2 py-1 rounded text-xs transition-colors',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200',
                     categoryFilter === option.value
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted hover:bg-muted/80'
+                      : 'bg-muted/50 text-foreground hover:bg-muted border border-border/50'
                   )}
                 >
                   {option.label}
@@ -145,31 +147,42 @@ export default function AircraftList({
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center h-40">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <div className="relative">
+              <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full animate-pulse" />
+              <Loader2 className="h-8 w-8 animate-spin text-primary relative" />
+            </div>
           </div>
         ) : filteredPositions.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
-            <Plane className="h-10 w-10 mb-2 opacity-50" />
-            <p className="text-sm">No aircraft found</p>
+            <div className="p-4 rounded-full bg-muted/30 mb-3">
+              <Plane className="h-8 w-8 opacity-50" />
+            </div>
+            <p className="text-sm font-medium text-foreground">No aircraft found</p>
+            <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters</p>
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="text-sm text-primary hover:underline mt-1"
+                className="text-sm text-primary hover:underline mt-2"
               >
                 Clear search
               </button>
             )}
           </div>
         ) : (
-          <div className={cn('p-4', compact ? 'space-y-1' : 'space-y-3')}>
-            {filteredPositions.map((position) => (
-              <AircraftCard
+          <div className={cn('p-3', compact ? 'space-y-1' : 'space-y-2')}>
+            {filteredPositions.map((position, index) => (
+              <div
                 key={position.icao_hex}
-                position={position}
-                onClick={() => onAircraftClick?.(position)}
-                isSelected={position.icao_hex === selectedAircraftId}
-                compact={compact}
-              />
+                className="animate-slide-up"
+                style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
+              >
+                <AircraftCard
+                  position={position}
+                  onClick={() => onAircraftClick?.(position)}
+                  isSelected={position.icao_hex === selectedAircraftId}
+                  compact={compact}
+                />
+              </div>
             ))}
           </div>
         )}

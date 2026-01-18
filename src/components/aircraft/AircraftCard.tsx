@@ -33,19 +33,25 @@ export default function AircraftCard({
       <div
         onClick={onClick}
         className={cn(
-          'flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors',
-          isSelected ? 'bg-primary/10 border border-primary' : 'hover:bg-muted'
+          'flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-all duration-200',
+          isSelected
+            ? 'bg-primary/10 border border-primary/50 shadow-lg'
+            : 'hover:bg-muted/50 border border-transparent'
         )}
+        style={isSelected ? { boxShadow: `0 0 20px ${color}20` } : undefined}
       >
         <div
-          className="p-1.5 rounded"
-          style={{ backgroundColor: `${color}20` }}
+          className="p-1.5 rounded-lg border"
+          style={{
+            backgroundColor: `${color}15`,
+            borderColor: `${color}30`
+          }}
         >
           <Plane className="h-4 w-4" style={{ color }} />
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="font-mono font-medium truncate">
+          <div className="font-mono font-semibold text-foreground truncate">
             {position.callsign || position.icao_hex}
           </div>
           <div className="text-xs text-muted-foreground">
@@ -54,7 +60,7 @@ export default function AircraftCard({
         </div>
 
         <div className="text-right text-xs">
-          <div>{formatAltitude(position.altitude)}</div>
+          <div className="text-foreground font-medium">{formatAltitude(position.altitude)}</div>
           <div className="text-muted-foreground">{formatSpeed(position.ground_speed)}</div>
         </div>
       </div>
@@ -65,23 +71,27 @@ export default function AircraftCard({
     <div
       onClick={onClick}
       className={cn(
-        'bg-card border rounded-lg p-4 cursor-pointer transition-all',
+        'glass rounded-xl p-4 cursor-pointer card-interactive',
         isSelected
-          ? 'border-primary shadow-md ring-1 ring-primary'
-          : 'border-border hover:border-primary/50 hover:shadow-sm'
+          ? 'border-primary/50 ring-1 ring-primary/30'
+          : 'border-border/50 hover:border-primary/30'
       )}
+      style={isSelected ? { boxShadow: `0 0 30px ${color}15` } : undefined}
     >
       {/* Header */}
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <div
-            className="p-2 rounded-lg"
-            style={{ backgroundColor: `${color}20` }}
+            className="p-2.5 rounded-lg border"
+            style={{
+              backgroundColor: `${color}15`,
+              borderColor: `${color}30`
+            }}
           >
             <Plane className="h-5 w-5" style={{ color }} />
           </div>
           <div>
-            <div className="font-mono font-semibold text-lg">
+            <div className="font-mono font-bold text-lg text-foreground">
               {position.callsign || position.icao_hex}
             </div>
             <div className="text-sm text-muted-foreground">
@@ -91,51 +101,55 @@ export default function AircraftCard({
         </div>
 
         <span
-          className="text-xs font-medium px-2 py-1 rounded-full"
-          style={{ backgroundColor: `${color}20`, color }}
+          className="text-xs font-semibold px-2.5 py-1 rounded-full border"
+          style={{
+            backgroundColor: `${color}20`,
+            color,
+            borderColor: `${color}40`
+          }}
         >
           {categoryLabel}
         </span>
       </div>
 
       {/* Details grid */}
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div className="flex items-center gap-2">
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-muted/30">
           <ArrowUp
-            className="h-4 w-4 text-muted-foreground"
+            className="h-4 w-4 text-primary"
             style={{ transform: `rotate(${position.track || 0}deg)` }}
           />
           <div>
             <div className="text-xs text-muted-foreground">Altitude</div>
-            <div className="font-medium">{formatAltitude(position.altitude)}</div>
+            <div className="font-semibold text-foreground">{formatAltitude(position.altitude)}</div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Gauge className="h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-muted/30">
+          <Gauge className="h-4 w-4 text-primary" />
           <div>
             <div className="text-xs text-muted-foreground">Speed</div>
-            <div className="font-medium">{formatSpeed(position.ground_speed)}</div>
+            <div className="font-semibold text-foreground">{formatSpeed(position.ground_speed)}</div>
           </div>
         </div>
       </div>
 
       {/* Location */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-        <MapPin className="h-4 w-4" />
-        <span>{formatCoordinates(position.latitude, position.longitude)}</span>
+      <div className="flex items-center gap-2 text-sm mb-4 p-2 rounded-lg bg-muted/20">
+        <MapPin className="h-4 w-4 text-accent" />
+        <span className="font-mono text-foreground">{formatCoordinates(position.latitude, position.longitude)}</span>
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border">
-        <span>ICAO: {position.icao_hex}</span>
-        <span>Updated {lastSeen}</span>
+      <div className="flex items-center justify-between text-xs pt-3 border-t border-border/50">
+        <span className="font-mono text-muted-foreground">ICAO: <span className="text-foreground">{position.icao_hex}</span></span>
+        <span className="text-muted-foreground">Updated {lastSeen}</span>
       </div>
 
       {/* Operator */}
       {position.aircraft?.operator && (
-        <div className="text-xs text-muted-foreground mt-2">
-          Operator: {position.aircraft.operator}
+        <div className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/30">
+          <span className="text-foreground/60">Operator:</span> <span className="text-foreground">{position.aircraft.operator}</span>
         </div>
       )}
     </div>

@@ -5,14 +5,17 @@ import dynamic from 'next/dynamic';
 import { useAircraft } from '@/hooks/useAircraft';
 import AircraftList from '@/components/aircraft/AircraftList';
 import type { PositionLatest } from '@/lib/types/aircraft';
-import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, Radio } from 'lucide-react';
 
 // Dynamically import map to avoid SSR issues with Mapbox
 const AircraftMap = dynamic(() => import('@/components/map/AircraftMap'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-muted">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+    <div className="w-full h-full flex items-center justify-center bg-background">
+      <div className="relative">
+        <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full animate-pulse" />
+        <div className="relative animate-spin rounded-full h-12 w-12 border-2 border-primary/30 border-t-primary" />
+      </div>
     </div>
   ),
 });
@@ -46,13 +49,13 @@ export default function MapPage() {
           <button
             onClick={refresh}
             disabled={loading}
-            className="flex items-center gap-2 px-3 py-1.5 bg-card/90 backdrop-blur-sm rounded-md border border-border text-sm hover:bg-card transition-colors"
+            className="flex items-center gap-2 px-3 py-2 glass rounded-lg text-sm font-medium text-foreground hover:bg-muted/50 transition-all duration-200 disabled:opacity-50"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-primary' : ''}`} />
             Refresh
           </button>
 
-          <div className="flex items-center gap-1 px-3 py-1.5 bg-card/90 backdrop-blur-sm rounded-md border border-border text-sm">
+          <div className="flex items-center gap-2 px-3 py-2 glass rounded-lg text-sm font-medium">
             {error ? (
               <>
                 <WifiOff className="h-4 w-4 text-destructive" />
@@ -60,8 +63,13 @@ export default function MapPage() {
               </>
             ) : (
               <>
-                <Wifi className="h-4 w-4 text-green-500" />
-                <span className="text-green-500">Live</span>
+                <div className="relative">
+                  <Radio className="h-4 w-4 text-green-400" />
+                  <div className="absolute inset-0 animate-ping">
+                    <Radio className="h-4 w-4 text-green-400 opacity-50" />
+                  </div>
+                </div>
+                <span className="text-green-400">Live</span>
               </>
             )}
           </div>
@@ -69,14 +77,18 @@ export default function MapPage() {
 
         {/* Error message */}
         {error && (
-          <div className="absolute bottom-4 left-4 right-4 max-w-md mx-auto bg-destructive/10 border border-destructive text-destructive px-4 py-2 rounded-md text-sm">
-            {error.message}
+          <div className="absolute bottom-4 left-4 right-4 max-w-md mx-auto glass border-destructive/50 text-foreground px-4 py-3 rounded-lg animate-slide-up">
+            <div className="flex items-center gap-2">
+              <WifiOff className="h-4 w-4 text-destructive" />
+              <span className="text-destructive font-medium">Connection Error</span>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">{error.message}</p>
           </div>
         )}
       </div>
 
       {/* Sidebar - Aircraft List */}
-      <div className="w-80 border-l border-border bg-card overflow-hidden">
+      <div className="w-80 border-l border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
         <AircraftList
           positions={positions}
           onAircraftClick={handleAircraftClick}

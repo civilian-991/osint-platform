@@ -22,19 +22,43 @@ export default function CredibilityBadge({
   size = 'md',
 }: CredibilityBadgeProps) {
   const getCredibilityLevel = (score: number) => {
-    if (score >= 0.8) return { level: 'high', label: 'Highly Credible', color: 'text-green-500', bgColor: 'bg-green-500/10' };
-    if (score >= 0.6) return { level: 'medium', label: 'Credible', color: 'text-yellow-500', bgColor: 'bg-yellow-500/10' };
-    if (score >= 0.4) return { level: 'low', label: 'Unverified', color: 'text-orange-500', bgColor: 'bg-orange-500/10' };
-    return { level: 'very-low', label: 'Low Credibility', color: 'text-red-500', bgColor: 'bg-red-500/10' };
+    if (score >= 0.8) return {
+      level: 'high',
+      label: 'Highly Credible',
+      color: 'text-green-400',
+      bgColor: 'bg-green-500/20',
+      borderColor: 'border-green-500/40'
+    };
+    if (score >= 0.6) return {
+      level: 'medium',
+      label: 'Credible',
+      color: 'text-amber-400',
+      bgColor: 'bg-amber-500/20',
+      borderColor: 'border-amber-500/40'
+    };
+    if (score >= 0.4) return {
+      level: 'low',
+      label: 'Unverified',
+      color: 'text-orange-400',
+      bgColor: 'bg-orange-500/20',
+      borderColor: 'border-orange-500/40'
+    };
+    return {
+      level: 'very-low',
+      label: 'Low Credibility',
+      color: 'text-red-400',
+      bgColor: 'bg-red-500/20',
+      borderColor: 'border-red-500/40'
+    };
   };
 
-  const { level, label, color, bgColor } = getCredibilityLevel(score);
+  const { level, label, color, bgColor, borderColor } = getCredibilityLevel(score);
 
   const Icon = iconMap[level];
 
   const sizeClasses = {
-    sm: 'text-xs px-1.5 py-0.5',
-    md: 'text-sm px-2 py-1',
+    sm: 'text-xs px-2 py-0.5',
+    md: 'text-sm px-2.5 py-1',
     lg: 'text-base px-3 py-1.5',
   };
 
@@ -47,15 +71,16 @@ export default function CredibilityBadge({
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1 rounded-full font-medium',
+        'inline-flex items-center gap-1.5 rounded-full font-medium border',
         bgColor,
         color,
+        borderColor,
         sizeClasses[size]
       )}
     >
       <Icon className={iconSizes[size]} />
       {showLabel && <span>{label}</span>}
-      <span className="opacity-75">({Math.round(score * 100)}%)</span>
+      <span className="opacity-80">({Math.round(score * 100)}%)</span>
     </div>
   );
 }
