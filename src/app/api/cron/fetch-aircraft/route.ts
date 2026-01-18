@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { execute, queryOne } from '@/lib/db';
+import { execute, queryOne, query } from '@/lib/db';
 import { adsbService } from '@/lib/services/adsb';
 import { detectMilitary } from '@/lib/utils/military-db';
+import type { WatchlistMatch } from '@/lib/types/watchlist';
 
 // Verify cron secret for security
 function verifyCronSecret(request: NextRequest): boolean {
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
 
     let upsertedAircraft = 0;
     let insertedPositions = 0;
+    let watchlistAlerts = 0;
 
     // Process each aircraft
     for (const ac of withPositions) {
@@ -98,6 +100,59 @@ export async function GET(request: NextRequest) {
           );
           insertedPositions++;
         }
+
+        // Check watchlists for this aircraft
+        const watchlistMatches = await query<WatchlistMatch>(
+          `SELECT * FROM check_aircraft_watchlist($1, $2, $3, $4)`,
+          [
+            ac.hex.toUpperCase(),
+            ac.r || null,
+            ac.flight?.trim() || null,
+            ac.t || null,
+          ]
+        );
+
+        // Create alerts for watchlist matches
+        for (const match of watchlistMatches) {
+          // Check if we already created an alert for this aircraft recently (within 1 hour)
+          const recentAlert = await queryOne<{ id: string }>(
+            `SELECT id FROM alerts
+             WHERE user_id = $1
+             AND alert_type = 'watchlist_aircraft'
+             AND (data->>'icao_hex')::text = $2
+             AND created_at > NOW() - INTERVAL '1 hour'`,
+            [match.user_id, ac.hex.toUpperCase()]
+          );
+
+          if (!recentAlert) {
+            await execute(
+              `INSERT INTO alerts (user_id, alert_type, severity, title, description, data)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [
+                match.user_id,
+                'watchlist_aircraft',
+                match.priority === 'critical' ? 'critical' : match.priority === 'high' ? 'high' : 'medium',
+                `Watchlist Aircraft Detected: ${ac.flight?.trim() || ac.hex.toUpperCase()}`,
+                `Aircraft ${ac.r || ac.hex} matched "${match.match_value}" in watchlist "${match.watchlist_name}". ${match.notes || ''}`,
+                {
+                  icao_hex: ac.hex.toUpperCase(),
+                  registration: ac.r || null,
+                  callsign: ac.flight?.trim() || null,
+                  type_code: ac.t || null,
+                  watchlist_id: match.watchlist_id,
+                  watchlist_name: match.watchlist_name,
+                  match_type: match.match_type,
+                  match_value: match.match_value,
+                  priority: match.priority,
+                  latitude: ac.lat,
+                  longitude: ac.lon,
+                  altitude: typeof ac.alt_baro === 'number' ? ac.alt_baro : null,
+                },
+              ]
+            );
+            watchlistAlerts++;
+          }
+        }
       } catch (acError) {
         console.error(`Error processing aircraft ${ac.hex}:`, acError);
       }
@@ -111,6 +166,7 @@ export async function GET(request: NextRequest) {
         withPositions: withPositions.length,
         upsertedAircraft,
         insertedPositions,
+        watchlistAlerts,
       },
       timestamp: new Date().toISOString(),
     });

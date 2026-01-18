@@ -11,7 +11,9 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/aircraft') ||
     request.nextUrl.pathname.startsWith('/news') ||
     request.nextUrl.pathname.startsWith('/correlations') ||
-    request.nextUrl.pathname.startsWith('/alerts');
+    request.nextUrl.pathname.startsWith('/alerts') ||
+    request.nextUrl.pathname.startsWith('/watchlists') ||
+    request.nextUrl.pathname.startsWith('/settings');
 
   const isAuthRoute =
     request.nextUrl.pathname.startsWith('/login') ||

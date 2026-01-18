@@ -4,14 +4,19 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import type { PositionLatest, MilitaryCategory } from '@/lib/types/aircraft';
+import type { SSEConnectionStatus } from '@/hooks/useSSEPositions';
 import { getMilitaryCategoryColor, getMilitaryCategoryLabel } from '@/lib/utils/military-db';
 import { formatAltitude, formatSpeed } from '@/lib/utils/geo';
+import ConnectionStatus from './ConnectionStatus';
 
 interface AircraftMapProps {
   positions: PositionLatest[];
   onAircraftClick?: (aircraft: PositionLatest) => void;
   selectedAircraftId?: string;
   showRegions?: boolean;
+  connectionStatus?: SSEConnectionStatus;
+  lastUpdate?: Date | null;
+  onReconnect?: () => void;
 }
 
 // Middle East center
@@ -23,6 +28,9 @@ export default function AircraftMap({
   onAircraftClick,
   selectedAircraftId,
   showRegions = true,
+  connectionStatus,
+  lastUpdate,
+  onReconnect,
 }: AircraftMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -227,6 +235,16 @@ export default function AircraftMap({
         <span className="font-semibold">{positions.length}</span>{' '}
         <span className="text-muted-foreground">aircraft tracked</span>
       </div>
+
+      {/* Connection status */}
+      {connectionStatus && (
+        <ConnectionStatus
+          status={connectionStatus}
+          lastUpdate={lastUpdate ?? null}
+          onReconnect={onReconnect}
+          className="absolute top-4 right-16"
+        />
+      )}
     </div>
   );
 }

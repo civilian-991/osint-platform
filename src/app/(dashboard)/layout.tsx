@@ -10,6 +10,8 @@ import {
   Newspaper,
   Link2,
   Bell,
+  Eye,
+  Settings,
   LogOut,
 } from 'lucide-react';
 
@@ -32,6 +34,8 @@ export default function DashboardLayout({
     { href: '/news', icon: Newspaper, label: 'News' },
     { href: '/correlations', icon: Link2, label: 'Correlations' },
     { href: '/alerts', icon: Bell, label: 'Alerts' },
+    { href: '/watchlists', icon: Eye, label: 'Watchlists' },
+    { href: '/settings', icon: Settings, label: 'Settings' },
   ];
 
   const user = session.data?.user;
