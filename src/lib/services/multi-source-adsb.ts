@@ -351,13 +351,21 @@ class MultiSourceADSBService {
    * Fetch military aircraft in Middle East region
    */
   async fetchMiddleEastMilitary(): Promise<ADSBAircraft[]> {
-    const allMilitary = await this.fetchMilitaryAircraft();
+    const allAircraft = await this.fetchMilitaryAircraft();
 
-    return allMilitary.filter((aircraft) => {
+    // Filter to ONLY military aircraft in the Middle East region
+    return allAircraft.filter((aircraft) => {
+      // Must be flagged as military
+      if (!aircraft.mil) {
+        return false;
+      }
+
+      // Must have position
       if (aircraft.lat === undefined || aircraft.lon === undefined) {
         return false;
       }
 
+      // Must be in Middle East region
       return (
         aircraft.lat >= REGION_BOUNDS.minLat &&
         aircraft.lat <= REGION_BOUNDS.maxLat &&
