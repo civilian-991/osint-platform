@@ -577,29 +577,36 @@ export class IntelligenceEngine {
   ): Promise<number> {
     try {
       // Get recent negative news from the region
-      let regionCondition = '';
+      let regionName: string | null = null;
       if (entityType === 'aircraft') {
         const position = await queryOne<{ latitude: number; longitude: number }>(
           `SELECT latitude, longitude FROM positions_latest WHERE aircraft_id = $1`,
           [entityId]
         );
 
-        if (!position) return 0.3; // Default moderate tension
+        if (!position) return 0; // No position data - return unknown (not biased)
 
-        const regionName = this.getRegionName(position.latitude, position.longitude);
-        regionCondition = `AND (title ILIKE '%${regionName}%' OR countries @> ARRAY['${regionName}'])`;
+        regionName = this.getRegionName(position.latitude, position.longitude);
       }
 
-      const recentNews = await query<{ sentiment_score: number | null }>(
-        `SELECT sentiment_score FROM news_events
-         WHERE published_at >= NOW() - INTERVAL '24 hours'
-         ${regionCondition}
-         AND sentiment_score IS NOT NULL`,
-        []
-      );
+      // Use parameterized query to prevent SQL injection
+      const recentNews = regionName
+        ? await query<{ sentiment_score: number | null }>(
+            `SELECT sentiment_score FROM news_events
+             WHERE published_at >= NOW() - INTERVAL '24 hours'
+             AND (title ILIKE '%' || $1 || '%' OR countries @> ARRAY[$1])
+             AND sentiment_score IS NOT NULL`,
+            [regionName]
+          )
+        : await query<{ sentiment_score: number | null }>(
+            `SELECT sentiment_score FROM news_events
+             WHERE published_at >= NOW() - INTERVAL '24 hours'
+             AND sentiment_score IS NOT NULL`,
+            []
+          );
 
       if (recentNews.length === 0) {
-        return 0.3; // Default moderate tension
+        return 0; // No news data - return unknown (not biased)
       }
 
       // Calculate average negative sentiment
@@ -615,7 +622,7 @@ export class IntelligenceEngine {
         negativeSentiments.reduce((a, b) => a + b, 0) / negativeSentiments.length;
       return Math.min(avgNegative / 100, 1); // Normalize from GDELT scale
     } catch {
-      return 0.3;
+      return 0; // Error case - return unknown (not biased)
     }
   }
 
@@ -823,12 +830,13 @@ export class IntelligenceEngine {
     hoursSince: number = 24
   ): Promise<AnomalyDetection[]> {
     try {
+      // Use parameterized interval to prevent SQL injection
       return await query<AnomalyDetection>(
         `SELECT * FROM anomaly_detections
          WHERE aircraft_id = $1
-         AND created_at >= NOW() - INTERVAL '${hoursSince} hours'
+         AND created_at >= NOW() - INTERVAL '1 hour' * $2
          ORDER BY created_at DESC`,
-        [aircraftId]
+        [aircraftId, hoursSince]
       );
     } catch {
       return [];

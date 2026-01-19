@@ -81,6 +81,24 @@ class StrikeTrackerService {
     // Calculate expiry time
     const expiresAt = new Date(postedAt.getTime() + DEFAULT_EXPIRE_HOURS * 60 * 60 * 1000);
 
+    // Check for duplicate strikes (same type, same location within 0.01 degrees, within 30 minutes)
+    const duplicateWindow = new Date(postedAt.getTime() - 30 * 60 * 1000); // 30 minutes before
+    const existingDuplicate = await queryOne<{ id: string }>(
+      `SELECT id FROM strike_events
+       WHERE event_type = $1
+       AND ABS(latitude - $2) < 0.01
+       AND ABS(longitude - $3) < 0.01
+       AND reported_at >= $4
+       AND is_active = TRUE
+       LIMIT 1`,
+      [eventType, location.latitude, location.longitude, duplicateWindow.toISOString()]
+    );
+
+    if (existingDuplicate) {
+      // Duplicate detected - skip insertion
+      return null;
+    }
+
     // Insert the strike event
     try {
       const result = await queryOne<{ id: string }>(
@@ -88,7 +106,6 @@ class StrikeTrackerService {
          (event_type, latitude, longitude, location_name, region, description,
           source_type, source_channel, confidence, reported_at, expires_at, is_active)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, TRUE)
-         ON CONFLICT DO NOTHING
          RETURNING id`,
         [
           eventType,
@@ -233,15 +250,17 @@ class StrikeTrackerService {
     // First expire old strikes
     await execute(`SELECT expire_old_strikes()`);
 
+    // Use parameterized interval to prevent SQL injection
     return query<StrikeEvent>(
       `SELECT
          id, event_type, latitude, longitude, location_name, region,
          description, source_channel, confidence, reported_at, is_active
        FROM strike_events
        WHERE is_active = TRUE
-       AND reported_at > NOW() - INTERVAL '${maxAge} hours'
+       AND reported_at > NOW() - INTERVAL '1 hour' * $1
        ORDER BY reported_at DESC
-       LIMIT 100`
+       LIMIT 100`,
+      [maxAge]
     );
   }
 

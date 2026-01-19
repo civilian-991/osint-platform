@@ -23,10 +23,10 @@ function verifyCronSecret(request: NextRequest): boolean {
     return true;
   }
 
-  // Allow if no secret is set (for testing)
+  // Reject if no secret is set (security hardening)
   if (!cronSecret) {
-    console.warn('CRON_SECRET not set - allowing request');
-    return true;
+    console.warn('CRON_SECRET not set - rejecting request');
+    return false;
   }
 
   return false;
