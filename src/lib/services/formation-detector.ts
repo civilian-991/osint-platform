@@ -1,6 +1,7 @@
 import { execute, queryOne, query } from '@/lib/db';
 import { distanceNm, bearing } from '@/lib/utils/geo';
 import { geminiClient } from './gemini-client';
+import { networkIntelligence } from './network-intelligence';
 import {
   detectFormationPattern,
   scoreFormationMatch,
@@ -204,6 +205,7 @@ export class FormationDetector {
             formationType: 'tanker_receiver',
             leadAircraftId: tanker.aircraft_id,
             aircraftIds: allAircraft.map((a) => a.aircraft_id),
+            icaoHexes: allAircraft.map((a) => a.icao_hex),
             ...geometry,
             confidence,
             detectionMethod: 'spatial_clustering',
@@ -278,6 +280,7 @@ export class FormationDetector {
             formationType: 'escort',
             leadAircraftId: hva.aircraft_id,
             aircraftIds: allAircraft.map((a) => a.aircraft_id),
+            icaoHexes: allAircraft.map((a) => a.icao_hex),
             ...geometry,
             confidence: Math.min(confidence, 0.95),
             detectionMethod: 'spatial_clustering',
@@ -359,6 +362,7 @@ export class FormationDetector {
           formationType: 'strike_package',
           leadAircraftId: cluster[0].aircraft_id,
           aircraftIds: cluster.map((a) => a.aircraft_id),
+          icaoHexes: cluster.map((a) => a.icao_hex),
           ...geometry,
           confidence: Math.min(confidence, 0.9),
           detectionMethod: 'spatial_clustering',
@@ -436,6 +440,7 @@ export class FormationDetector {
           formationType: 'cap',
           leadAircraftId: capGroup[0].aircraft_id,
           aircraftIds: capGroup.map((a) => a.aircraft_id),
+          icaoHexes: capGroup.map((a) => a.icao_hex),
           ...geometry,
           confidence: Math.min(confidence, 0.85),
           detectionMethod: 'temporal_correlation',
@@ -541,6 +546,7 @@ export class FormationDetector {
     formationType: FormationType;
     leadAircraftId: string;
     aircraftIds: string[];
+    icaoHexes: string[];
     centerLat: number;
     centerLon: number;
     spreadNm: number;
@@ -563,9 +569,11 @@ export class FormationDetector {
         [params.formationType, params.aircraftIds]
       );
 
+      let formation: FormationDetection | null = null;
+
       if (existing) {
         // Update existing formation
-        const updated = await queryOne<FormationDetection>(
+        formation = await queryOne<FormationDetection>(
           `UPDATE formation_detections SET
              aircraft_ids = $1,
              center_lat = $2,
@@ -591,10 +599,9 @@ export class FormationDetector {
             existing.id,
           ]
         );
-        return updated;
       } else {
         // Create new formation
-        const created = await queryOne<FormationDetection>(
+        formation = await queryOne<FormationDetection>(
           `INSERT INTO formation_detections
            (formation_type, confidence, lead_aircraft_id, aircraft_ids,
             center_lat, center_lon, spread_nm, heading,
@@ -617,8 +624,23 @@ export class FormationDetector {
             params.analysis || null,
           ]
         );
-        return created;
       }
+
+      // Update network intelligence co-occurrence data
+      if (formation && params.aircraftIds.length >= 2 && params.icaoHexes.length >= 2) {
+        try {
+          await networkIntelligence.updateCooccurrenceFromFormation(
+            params.formationType,
+            params.aircraftIds,
+            params.icaoHexes
+          );
+        } catch (networkError) {
+          // Log but don't fail the formation detection
+          console.error('Error updating network co-occurrence:', networkError);
+        }
+      }
+
+      return formation;
     } catch (error) {
       console.error('Error creating/updating formation:', error);
       return null;

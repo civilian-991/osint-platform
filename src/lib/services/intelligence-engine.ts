@@ -15,6 +15,7 @@ import {
   createIntentExplanation,
   generateCounterfactuals,
 } from './explainability-engine';
+import { contextIntelligence } from './context-intelligence';
 import type {
   AnomalyDetection,
   AnomalyType,
@@ -41,13 +42,14 @@ const CONFIG = {
   threatValidityHours: 6, // How long threat assessments are valid
 };
 
-// Weight constants
+// Weight constants (adjusted to include location context)
 const THREAT_WEIGHT_VALUES = {
-  patternAnomaly: 0.25,
-  regionalTension: 0.20,
-  newsCorrelation: 0.25,
+  patternAnomaly: 0.20,
+  regionalTension: 0.15,
+  newsCorrelation: 0.20,
   historicalContext: 0.15,
-  formationActivity: 0.15,
+  formationActivity: 0.10,
+  locationContext: 0.20, // New: infrastructure, airspace, activity zone awareness
 };
 
 export class IntelligenceEngine {
@@ -412,14 +414,19 @@ export class IntelligenceEngine {
         entityType,
         entityId
       );
+      const locationContextScore = await this.calculateLocationContextScore(
+        entityType,
+        entityId
+      );
 
-      // Calculate composite score
+      // Calculate composite score (now includes location context)
       const threatScore =
         patternAnomalyScore * THREAT_WEIGHT_VALUES.patternAnomaly +
         regionalTensionScore * THREAT_WEIGHT_VALUES.regionalTension +
         newsCorrelationScore * THREAT_WEIGHT_VALUES.newsCorrelation +
         historicalContextScore * THREAT_WEIGHT_VALUES.historicalContext +
-        formationActivityScore * THREAT_WEIGHT_VALUES.formationActivity;
+        formationActivityScore * THREAT_WEIGHT_VALUES.formationActivity +
+        locationContextScore * THREAT_WEIGHT_VALUES.locationContext;
 
       const threatLevel = this.getThreatLevelFromScore(threatScore);
 
@@ -450,6 +457,7 @@ export class IntelligenceEngine {
               newsCorrelationScore,
               historicalContextScore,
               formationActivityScore,
+              locationContextScore,
             },
           });
 
@@ -472,13 +480,19 @@ export class IntelligenceEngine {
       // Store assessment
       const validUntil = new Date(Date.now() + CONFIG.threatValidityHours * 60 * 60 * 1000);
 
+      // Add location context to factors
+      if (locationContextScore > 0) {
+        const significance = locationContextScore >= 0.7 ? 'high' : locationContextScore >= 0.4 ? 'medium' : 'low';
+        factors.location = [`Location context score: ${(locationContextScore * 100).toFixed(0)}% (${significance} significance)`];
+      }
+
       const assessment = await queryOne<ThreatAssessment>(
         `INSERT INTO threat_assessments
          (entity_type, entity_id, threat_score, threat_level,
           pattern_anomaly_score, regional_tension_score, news_correlation_score,
-          historical_context_score, formation_activity_score,
+          historical_context_score, formation_activity_score, location_context_score,
           factors, analysis, recommendations, confidence, valid_until)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          ON CONFLICT (entity_type, entity_id) DO UPDATE SET
            threat_score = EXCLUDED.threat_score,
            threat_level = EXCLUDED.threat_level,
@@ -487,6 +501,7 @@ export class IntelligenceEngine {
            news_correlation_score = EXCLUDED.news_correlation_score,
            historical_context_score = EXCLUDED.historical_context_score,
            formation_activity_score = EXCLUDED.formation_activity_score,
+           location_context_score = EXCLUDED.location_context_score,
            factors = EXCLUDED.factors,
            analysis = EXCLUDED.analysis,
            recommendations = EXCLUDED.recommendations,
@@ -504,6 +519,7 @@ export class IntelligenceEngine {
           newsCorrelationScore,
           historicalContextScore,
           formationActivityScore,
+          locationContextScore,
           JSON.stringify(factors),
           analysis,
           JSON.stringify(recommendations),
@@ -714,6 +730,48 @@ export class IntelligenceEngine {
 
       return maxScore;
     } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Calculate location context score based on infrastructure, airspace, and activity zones
+   */
+  private async calculateLocationContextScore(
+    entityType: ThreatEntityType,
+    entityId: string
+  ): Promise<number> {
+    if (entityType !== 'aircraft') {
+      return 0;
+    }
+
+    try {
+      // Get aircraft's current position
+      const position = await queryOne<{
+        latitude: number;
+        longitude: number;
+        altitude: number | null;
+      }>(
+        `SELECT latitude, longitude, altitude FROM positions_latest WHERE aircraft_id = $1`,
+        [entityId]
+      );
+
+      if (!position) {
+        return 0;
+      }
+
+      // Get context for the position
+      const context = await contextIntelligence.getPositionContext(
+        position.latitude,
+        position.longitude,
+        position.altitude ?? undefined
+      );
+
+      // Return the combined context score
+      // This considers proximity to critical infrastructure, restricted airspace, and activity zones
+      return context.combined_score;
+    } catch (error) {
+      console.error('Error calculating location context score:', error);
       return 0;
     }
   }

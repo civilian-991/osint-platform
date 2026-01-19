@@ -5,3 +5,7 @@ export * from './watchlist';
 export * from './preferences';
 export * from './ml';
 export * from './geofence';
+export * from './predictions';
+export * from './network';
+export * from './context';
+export * from './dashboard';

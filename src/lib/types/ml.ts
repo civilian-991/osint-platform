@@ -136,6 +136,7 @@ export interface ThreatAssessment {
   news_correlation_score: number;
   historical_context_score: number;
   formation_activity_score: number;
+  location_context_score: number;
   factors: ThreatFactors;
   analysis: string | null;
   recommendations: ThreatRecommendation[];
@@ -155,6 +156,7 @@ export interface ThreatFactors {
   correlations?: string[];
   historical?: string[];
   formations?: string[];
+  location?: string[];
 }
 
 export interface ThreatRecommendation {
@@ -164,11 +166,12 @@ export interface ThreatRecommendation {
 }
 
 export const THREAT_WEIGHTS = {
-  patternAnomaly: 0.25,
-  regionalTension: 0.20,
-  newsCorrelation: 0.25,
+  patternAnomaly: 0.20,
+  regionalTension: 0.15,
+  newsCorrelation: 0.20,
   historicalContext: 0.15,
-  formationActivity: 0.15,
+  formationActivity: 0.10,
+  locationContext: 0.20,
 } as const;
 
 export function getThreatLevel(score: number): ThreatLevel {
@@ -426,7 +429,11 @@ export type MLTaskType =
   | 'intent_classification'
   | 'threat_assessment'
   | 'profile_update'
-  | 'corroboration_scoring';
+  | 'corroboration_scoring'
+  | 'trajectory_prediction'
+  | 'proximity_analysis'
+  | 'network_analysis'
+  | 'context_scoring';
 
 export type MLTaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

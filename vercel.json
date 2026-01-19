@@ -32,6 +32,22 @@
     {
       "path": "/api/cron/cleanup-cache",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/update-predictions",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/update-context",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/update-network",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/collect-metrics",
+      "schedule": "0 0 * * *"
     }
   ],
   "headers": [
