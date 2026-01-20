@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  // Check for session cookie (Neon Auth uses this cookie name)
-  const sessionCookie = request.cookies.get('__Secure-neon-auth.session_token');
+  // Check for session cookie (Neon Auth uses different names for secure vs dev)
+  // In production (HTTPS): __Secure-neon-auth.session_token
+  // In development (HTTP): neon-auth.session_token
+  const sessionCookie =
+    request.cookies.get('__Secure-neon-auth.session_token') ||
+    request.cookies.get('neon-auth.session_token');
   const isAuthenticated = !!sessionCookie?.value;
 
   const isProtectedRoute =

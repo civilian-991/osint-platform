@@ -9,7 +9,10 @@ export function createServerAuthClient() {
 // Get session from cookies for server-side use
 export async function getServerSession() {
   const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('__Secure-neon-auth.session_token');
+  // Check both secure (HTTPS/production) and non-secure (HTTP/development) cookie names
+  const sessionCookie =
+    cookieStore.get('__Secure-neon-auth.session_token') ||
+    cookieStore.get('neon-auth.session_token');
 
   if (!sessionCookie?.value) {
     return null;
