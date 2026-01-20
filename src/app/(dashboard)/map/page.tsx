@@ -162,15 +162,11 @@ export default function MapPage() {
 
       {/* Sidebar */}
       <div className="w-80 border-l border-border/50 bg-card/50 backdrop-blur-sm flex flex-col overflow-hidden">
-        {/* Intelligence Alerts Panel */}
-        {showAlertsPanel && (
-          <div className="border-b border-border/50 max-h-[50%] overflow-hidden">
-            <IntelAlertPanel />
-          </div>
-        )}
-
         {/* Aircraft List */}
-        <div className="flex-1 overflow-hidden">
+        <div className={cn(
+          "overflow-hidden",
+          showAlertsPanel ? "max-h-[50%] border-b border-border/50" : "flex-1"
+        )}>
           <AircraftList
             positions={positions}
             onAircraftClick={handleAircraftClick}
@@ -179,6 +175,13 @@ export default function MapPage() {
             compact={true}
           />
         </div>
+
+        {/* Intelligence Alerts Panel */}
+        {showAlertsPanel && (
+          <div className="flex-1 overflow-hidden">
+            <IntelAlertPanel />
+          </div>
+        )}
       </div>
     </div>
   );
