@@ -495,6 +495,49 @@ export class CorrelationEngine {
 
     return parts.join(' | ') || 'Potential correlation detected';
   }
+
+  /**
+   * Enhance a correlation with async ML-powered scores
+   * Call this after findCorrelations to get real entity and corroboration scores
+   */
+  async enhanceCorrelationAsync(
+    correlation: Omit<Correlation, 'id' | 'created_at' | 'updated_at'>,
+    news: NewsEvent,
+    flight: Flight,
+    positions: Position[],
+    aircraft?: { type_code?: string | null; operator?: string | null } | null
+  ): Promise<Omit<Correlation, 'id' | 'created_at' | 'updated_at'>> {
+    try {
+      const enhancedFactors = await this.calculateFactorsAsync(
+        news,
+        flight,
+        positions,
+        aircraft?.type_code,
+        aircraft?.operator
+      );
+
+      // Recalculate confidence with real scores
+      const factors: CorrelationFactors = {
+        temporalProximity: correlation.temporal_score,
+        spatialProximity: correlation.spatial_score,
+        sourceCredibility: enhancedFactors.sourceCredibility,
+        patternSignificance: correlation.pattern_score,
+        corroboration: enhancedFactors.corroboration,
+      };
+
+      const newConfidence = calculateConfidence(factors);
+
+      return {
+        ...correlation,
+        entity_score: enhancedFactors.entityScore,
+        corroboration_score: enhancedFactors.corroboration,
+        confidence_score: newConfidence,
+      };
+    } catch (error) {
+      console.error('Error enhancing correlation:', error);
+      return correlation;
+    }
+  }
 }
 
 // Export singleton instance

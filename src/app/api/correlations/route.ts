@@ -25,6 +25,15 @@ interface CorrelationWithRelations {
 
 export async function GET(request: NextRequest) {
   try {
+    // Require authentication to view correlations
+    const session = await getServerSession();
+    if (!session?.data?.user) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const minConfidence = searchParams.get('minConfidence');

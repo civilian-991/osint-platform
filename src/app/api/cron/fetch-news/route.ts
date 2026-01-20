@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { execute, query, queryOne } from '@/lib/db';
 import { gdeltService, fetchMilitaryAviationNews } from '@/lib/services/gdelt';
 import { correlationEngine } from '@/lib/services/correlation-engine';
-import type { Flight, Position } from '@/lib/types/aircraft';
+import type { Flight, Position, Aircraft } from '@/lib/types/aircraft';
 import type { NewsEvent } from '@/lib/types/news';
 
 // Helper to queue ML tasks
@@ -135,6 +135,19 @@ export async function GET(request: NextRequest) {
           [fourHoursAgo]
         );
 
+        // Fetch aircraft data for entity scoring
+        const aircraftIds = [...new Set(flights.map(f => f.aircraft_id).filter(Boolean))];
+        const aircraftMap = new Map<string, Aircraft>();
+        if (aircraftIds.length > 0) {
+          const aircraftData = await query<Aircraft>(
+            `SELECT * FROM aircraft WHERE id = ANY($1)`,
+            [aircraftIds]
+          );
+          for (const ac of aircraftData) {
+            aircraftMap.set(ac.id, ac);
+          }
+        }
+
         if (flights.length > 0) {
           // Create full news event with ID
           const fullNewsEvent: NewsEvent = {
@@ -143,15 +156,37 @@ export async function GET(request: NextRequest) {
             created_at: new Date().toISOString(),
           };
 
-          const correlations = correlationEngine.findCorrelations(
+          const baseCorrelations = correlationEngine.findCorrelations(
             [fullNewsEvent],
             flights,
             positions
           );
 
-          // Insert correlations
-          for (const correlation of correlations) {
+          // Track enhanced correlations for alert generation
+          const enhancedCorrelations: typeof baseCorrelations = [];
+
+          // Enhance correlations with async ML scores and insert
+          for (const correlation of baseCorrelations) {
             try {
+              // Find the matching flight for async enhancement
+              const flight = flights.find(f => f.id === correlation.flight_id);
+              const aircraft = correlation.aircraft_id
+                ? aircraftMap.get(correlation.aircraft_id)
+                : undefined;
+
+              // Enhance with real entity and corroboration scores
+              let enhancedCorrelation = correlation;
+              if (flight) {
+                enhancedCorrelation = await correlationEngine.enhanceCorrelationAsync(
+                  correlation,
+                  fullNewsEvent,
+                  flight,
+                  positions,
+                  aircraft
+                );
+              }
+              enhancedCorrelations.push(enhancedCorrelation);
+
               await execute(
                 `INSERT INTO correlations (
                   news_event_id, flight_id, aircraft_id, correlation_type,
@@ -161,17 +196,17 @@ export async function GET(request: NextRequest) {
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())`,
                 [
                   newsRecord.id,
-                  correlation.flight_id || null,
-                  correlation.aircraft_id || null,
-                  correlation.correlation_type,
-                  correlation.confidence_score,
-                  correlation.temporal_score,
-                  correlation.spatial_score,
-                  correlation.entity_score,
-                  correlation.pattern_score,
-                  correlation.corroboration_score,
-                  JSON.stringify(correlation.evidence || {}),
-                  correlation.status || 'pending',
+                  enhancedCorrelation.flight_id || null,
+                  enhancedCorrelation.aircraft_id || null,
+                  enhancedCorrelation.correlation_type,
+                  enhancedCorrelation.confidence_score,
+                  enhancedCorrelation.temporal_score,
+                  enhancedCorrelation.spatial_score,
+                  enhancedCorrelation.entity_score,
+                  enhancedCorrelation.pattern_score,
+                  enhancedCorrelation.corroboration_score,
+                  JSON.stringify(enhancedCorrelation.evidence || {}),
+                  enhancedCorrelation.status || 'pending',
                 ]
               );
               correlationsCreated++;
@@ -180,8 +215,8 @@ export async function GET(request: NextRequest) {
             }
           }
 
-          // Generate and insert alerts for high-confidence correlations
-          const highConfCorrelations = correlations.filter(
+          // Generate and insert alerts for high-confidence correlations (using enhanced scores)
+          const highConfCorrelations = enhancedCorrelations.filter(
             (c) => c.confidence_score >= 0.6
           );
 
