@@ -27,6 +27,10 @@ const ALERT_TYPE_BASE_SCORES: Record<AlertType, number> = {
   new_correlation: 0.7,
   breaking_news: 0.65,
   region_activity: 0.5,
+  aircraft_first_appearance: 0.8,
+  aircraft_departure: 0.75,
+  aircraft_landing: 0.6,
+  aircraft_disappeared: 0.65,
 };
 
 // Severity multipliers

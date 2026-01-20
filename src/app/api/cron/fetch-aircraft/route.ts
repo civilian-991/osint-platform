@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { execute, queryOne, query } from '@/lib/db';
 import { multiSourceADSB } from '@/lib/services/multi-source-adsb';
 import { detectMilitary } from '@/lib/utils/military-db';
+import { aircraftEventTracker } from '@/lib/services/aircraft-event-tracker';
 import type { WatchlistMatch } from '@/lib/types/watchlist';
 
 // Helper to queue ML tasks
@@ -71,12 +72,38 @@ export async function GET(request: NextRequest) {
     let upsertedAircraft = 0;
     let insertedPositions = 0;
     let watchlistAlerts = 0;
+    let aircraftEvents = 0;
+
+    // Check if Telegram notifications are enabled
+    const telegramEnabled = !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_ALERT_CHAT_ID);
+    const notifyNewAircraft = process.env.NOTIFY_NEW_AIRCRAFT !== 'false';
+    const notifyDepartures = process.env.NOTIFY_DEPARTURES !== 'false';
 
     // Process each aircraft
     for (const ac of withPositions) {
       try {
-        // Upsert aircraft record
+        // Detect military status
         const detection = detectMilitary(ac);
+
+        // Track aircraft events (new aircraft, departures, landings) - BEFORE upserting
+        if (telegramEnabled && detection.isMilitary) {
+          try {
+            const events = await aircraftEventTracker.processAndNotify(
+              ac,
+              detection.category,
+              {
+                notifyFirstAppearance: notifyNewAircraft,
+                notifyDeparture: notifyDepartures,
+                notifyLanding: false, // Landings are less important, can enable if needed
+              }
+            );
+            aircraftEvents += events.length;
+          } catch (eventError) {
+            console.error(`Error tracking events for ${ac.hex}:`, eventError);
+          }
+        }
+
+        // Upsert aircraft record
 
         const aircraftRecord = await queryOne<{ id: string }>(
           `INSERT INTO aircraft (icao_hex, registration, type_code, type_description, operator, is_military, military_category, updated_at)
@@ -208,6 +235,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Cleanup old cache entries periodically
+    aircraftEventTracker.cleanupCache();
+
     return NextResponse.json({
       success: true,
       message: `Processed ${withPositions.length} aircraft from ${sources}`,
@@ -217,7 +247,10 @@ export async function GET(request: NextRequest) {
         upsertedAircraft,
         insertedPositions,
         watchlistAlerts,
+        aircraftEvents,
+        telegramEnabled,
         sources: multiSourceADSB.getSourceStats(),
+        eventTrackerCache: aircraftEventTracker.getCacheStats(),
       },
       timestamp: new Date().toISOString(),
     });

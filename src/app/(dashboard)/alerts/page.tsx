@@ -23,6 +23,10 @@ const TYPE_LABELS: Record<AlertType, string> = {
   geofence_entry: 'Geofence Entry',
   geofence_exit: 'Geofence Exit',
   geofence_dwell: 'Geofence Dwell',
+  aircraft_first_appearance: 'New Aircraft',
+  aircraft_departure: 'Aircraft Departure',
+  aircraft_landing: 'Aircraft Landing',
+  aircraft_disappeared: 'Signal Lost',
 };
 
 export default function AlertsPage() {

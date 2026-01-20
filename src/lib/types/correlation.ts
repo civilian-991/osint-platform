@@ -97,7 +97,11 @@ export type AlertType =
   | 'region_activity'
   | 'geofence_entry'
   | 'geofence_exit'
-  | 'geofence_dwell';
+  | 'geofence_dwell'
+  | 'aircraft_first_appearance'
+  | 'aircraft_departure'
+  | 'aircraft_landing'
+  | 'aircraft_disappeared';
 
 export type AlertSeverity =
   | 'low'
