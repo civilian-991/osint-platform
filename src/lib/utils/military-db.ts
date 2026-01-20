@@ -35,6 +35,21 @@ const MILITARY_HEX_RANGES: Array<{
 // Civilian type codes that should NEVER be flagged as military
 // These might otherwise match military patterns (e.g., T154 matching trainer pattern)
 const CIVILIAN_TYPE_CODES: string[] = [
+  // Cessna (C-prefix would match C-17, C-130, etc.)
+  'C150', 'C152', 'C162', 'C170', 'C172', 'C175', 'C177', 'C180', 'C182', 'C185',
+  'C188', 'C190', 'C195', 'C206', 'C207', 'C208', 'C210', 'C303', 'C310', 'C320',
+  'C335', 'C336', 'C337', 'C340', 'C401', 'C402', 'C404', 'C406', 'C408', 'C411',
+  'C414', 'C421', 'C425', 'C441', 'C500', 'C501', 'C510', 'C525', 'C526', 'C550',
+  'C551', 'C560', 'C56X', 'C680', 'C750', 'C25A', 'C25B', 'C25C', 'C25M',
+  // Cirrus
+  'SR20', 'SR22', 'SF50',
+  // Piper (P-prefix could match P-8)
+  'P28A', 'P28B', 'P28R', 'P28S', 'P28T', 'P28U', 'P32R', 'P32T', 'P46T',
+  'PA18', 'PA22', 'PA23', 'PA24', 'PA27', 'PA28', 'PA30', 'PA31', 'PA32',
+  'PA34', 'PA38', 'PA44', 'PA46', 'PA60',
+  // Beechcraft
+  'B58', 'BE58', 'BE55', 'BE35', 'BE36', 'BE33', 'BE76', 'BE18', 'BE20', 'BE30',
+  'BE40', 'BE9L', 'BE99', 'B190', 'B350', 'B300', 'B200', 'B100',
   // Tupolev (T-prefix would match trainer pattern)
   'T154', 'T134', 'T204', 'T214', 'TU54', 'TU34',
   // Fokker (F-prefix would match fighter pattern)

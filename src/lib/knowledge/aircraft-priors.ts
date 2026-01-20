@@ -2195,6 +2195,18 @@ function normalizeTypeCode(typeCode: string): string {
 }
 
 /**
+ * Check if a suffix is a valid variant code (letters only, like E, A, B, C)
+ * This prevents C172 from matching C17 (172 has digit suffix "2")
+ * but allows F15E to match F15 (E is a letter variant)
+ */
+function isValidVariantSuffix(suffix: string): boolean {
+  // Empty suffix is valid (exact match)
+  if (suffix.length === 0) return true;
+  // Only letters are valid variant suffixes (e.g., E, A, B, C, SA, SM)
+  return /^[A-Z]+$/.test(suffix);
+}
+
+/**
  * Get aircraft prior by type code
  */
 export function getAircraftPrior(typeCode: string): AircraftPrior | undefined {
@@ -2212,10 +2224,25 @@ export function getAircraftPrior(typeCode: string): AircraftPrior | undefined {
   }
 
   // Try prefix match with normalization (e.g., F-15E -> F15, MQ-4C -> MQ4C)
+  // Only match if the remaining suffix is letters only (variant codes)
+  // This prevents C172 from matching C17 (extra digit) but allows F15E -> F15
   for (const [key, prior] of Object.entries(AIRCRAFT_PRIORS)) {
     const normalizedKey = normalizeTypeCode(key);
-    if (normalized.startsWith(normalizedKey) || normalizedKey.startsWith(normalized)) {
-      return prior;
+
+    // Check if input starts with our key (e.g., F15E starts with F15)
+    if (normalized.startsWith(normalizedKey)) {
+      const suffix = normalized.slice(normalizedKey.length);
+      if (isValidVariantSuffix(suffix)) {
+        return prior;
+      }
+    }
+
+    // Check if our key starts with input (e.g., F15 matches F15E in database)
+    if (normalizedKey.startsWith(normalized)) {
+      const suffix = normalizedKey.slice(normalized.length);
+      if (isValidVariantSuffix(suffix)) {
+        return prior;
+      }
     }
   }
 
