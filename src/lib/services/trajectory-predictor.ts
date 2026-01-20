@@ -130,18 +130,31 @@ export class TrajectoryPredictor {
       const turnDegrees = input.turn_rate * horizonMinutes * 60;
       predictedHeading = (heading + turnDegrees + 360) % 360;
 
-      // For curved paths, reduce distance (aircraft turns, doesn't go straight)
-      const avgHeadingChange = Math.abs(turnDegrees) / 2;
-      if (avgHeadingChange > 10) {
-        distanceNm *= Math.cos(avgHeadingChange * (Math.PI / 180));
+      // For curved paths, calculate chord distance instead of arc length
+      // For a circular arc, chord/arc ratio = sin(θ/2) / (θ/2) where θ is total angle in radians
+      const totalAngleRad = Math.abs(turnDegrees) * (Math.PI / 180);
+      if (totalAngleRad > 0.1) { // Only apply for turns > ~6 degrees
+        // Use sinc function: sin(x)/x approaches 1 for small x
+        // This correctly handles all turn angles including > 180°
+        const halfAngle = totalAngleRad / 2;
+        const chordRatio = Math.sin(halfAngle) / halfAngle;
+        distanceNm *= chordRatio;
       }
     }
 
     // Calculate predicted position using great circle navigation
+    // For curved paths, use the chord bearing (midpoint of heading change)
+    // Handle heading wraparound correctly for the bearing calculation
+    let bearingToUse = heading;
+    if (input.turn_rate && input.turn_rate !== 0) {
+      const turnDegrees = input.turn_rate * horizonMinutes * 60;
+      // For the chord, we need the bearing at the midpoint of the turn
+      bearingToUse = (heading + turnDegrees / 2 + 360) % 360;
+    }
     const predictedPos = destination(
       input.latitude,
       input.longitude,
-      (heading + predictedHeading) / 2, // Use average heading for curved path
+      bearingToUse,
       distanceNm
     );
 

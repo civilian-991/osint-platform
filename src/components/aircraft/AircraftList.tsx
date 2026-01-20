@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { List } from 'react-window';
+import type { RowComponentProps } from 'react-window';
 import { Search, Filter, ChevronDown, Plane, Loader2 } from 'lucide-react';
 import type { PositionLatest, MilitaryCategory } from '@/lib/types/aircraft';
 import AircraftCard from './AircraftCard';
@@ -25,6 +27,42 @@ const CATEGORY_OPTIONS: { value: MilitaryCategory | 'all'; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
+// Item heights for virtualization (including padding/margin)
+const COMPACT_ITEM_HEIGHT = 68;
+const FULL_ITEM_HEIGHT = 320;
+
+// Row props type for virtualized list (custom props passed via rowProps)
+interface VirtualizedRowProps {
+  positions: PositionLatest[];
+  onAircraftClick?: (aircraft: PositionLatest) => void;
+  selectedAircraftId?: string;
+  compact: boolean;
+}
+
+// Row component for virtualization (react-window v2 API)
+// react-window automatically injects index, style, and ariaAttributes
+const VirtualizedRow = ({
+  index,
+  style,
+  positions,
+  onAircraftClick,
+  selectedAircraftId,
+  compact
+}: RowComponentProps<VirtualizedRowProps>) => {
+  const position = positions[index];
+
+  return (
+    <div style={style} className={cn('px-3', compact ? 'py-0.5' : 'py-1')}>
+      <AircraftCard
+        position={position}
+        onClick={() => onAircraftClick?.(position)}
+        isSelected={position.icao_hex === selectedAircraftId}
+        compact={compact}
+      />
+    </div>
+  );
+};
+
 export default function AircraftList({
   positions,
   onAircraftClick,
@@ -35,6 +73,25 @@ export default function AircraftList({
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<MilitaryCategory | 'all'>('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [containerHeight, setContainerHeight] = useState(400);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Measure container height for virtualization
+  useEffect(() => {
+    const updateHeight = () => {
+      if (containerRef.current) {
+        setContainerHeight(containerRef.current.clientHeight);
+      }
+    };
+
+    updateHeight();
+    const resizeObserver = new ResizeObserver(updateHeight);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, []);
 
   const filteredPositions = useMemo(() => {
     return positions.filter((position) => {
@@ -144,7 +201,7 @@ export default function AircraftList({
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-hidden" ref={containerRef}>
         {loading ? (
           <div className="flex items-center justify-center h-40">
             <div className="relative">
@@ -169,22 +226,19 @@ export default function AircraftList({
             )}
           </div>
         ) : (
-          <div className={cn('p-3', compact ? 'space-y-1' : 'space-y-2')}>
-            {filteredPositions.map((position, index) => (
-              <div
-                key={position.icao_hex}
-                className="animate-slide-up"
-                style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
-              >
-                <AircraftCard
-                  position={position}
-                  onClick={() => onAircraftClick?.(position)}
-                  isSelected={position.icao_hex === selectedAircraftId}
-                  compact={compact}
-                />
-              </div>
-            ))}
-          </div>
+          <List
+            style={{ height: containerHeight }}
+            rowCount={filteredPositions.length}
+            rowHeight={compact ? COMPACT_ITEM_HEIGHT : FULL_ITEM_HEIGHT}
+            rowComponent={VirtualizedRow}
+            rowProps={{
+              positions: filteredPositions,
+              onAircraftClick,
+              selectedAircraftId,
+              compact,
+            }}
+            overscanCount={5}
+          />
         )}
       </div>
     </div>

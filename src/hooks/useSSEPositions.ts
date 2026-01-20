@@ -95,10 +95,14 @@ export function useSSEPositions(options: UseSSEPositionsOptions = {}): UseSSEPos
   }, []);
 
   const connect = useCallback(() => {
-    // Clean up any existing connection
+    // Clean up any existing connection and pending reconnect timeout
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
     }
     stopPolling();
 
@@ -129,6 +133,7 @@ export function useSSEPositions(options: UseSSEPositionsOptions = {}): UseSSEPos
           }
         } catch (parseError) {
           console.error('Failed to parse SSE message:', parseError);
+          handleError(parseError instanceof Error ? parseError : new Error('Failed to parse SSE message'));
         }
       };
 

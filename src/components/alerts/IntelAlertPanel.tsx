@@ -114,26 +114,32 @@ export default function IntelAlertPanel({ className }: { className?: string }) {
     try {
       // Fetch unified intel feed
       const feedRes = await fetch('/api/intel/feed?limit=30');
-      const feedData = await feedRes.json();
-      if (feedData.success) {
-        setFeedItems(feedData.data);
+      if (feedRes.ok) {
+        const feedData = await feedRes.json();
+        if (feedData.success) {
+          setFeedItems(feedData.data);
+        }
       }
 
       // Fetch alerts (fallback)
       const alertsRes = await fetch('/api/alerts/smart?limit=10');
-      const alertsData = await alertsRes.json();
-      if (alertsData.success) {
-        const intelAlerts = alertsData.data.filter((a: IntelAlert) =>
-          ['flash_alert', 'formation_alert', 'activity_spike', 'regional_alert', 'news_correlation'].includes(a.alert_type)
-        );
-        setAlerts(intelAlerts);
+      if (alertsRes.ok) {
+        const alertsData = await alertsRes.json();
+        if (alertsData.success) {
+          const intelAlerts = alertsData.data.filter((a: IntelAlert) =>
+            ['flash_alert', 'formation_alert', 'activity_spike', 'regional_alert', 'news_correlation'].includes(a.alert_type)
+          );
+          setAlerts(intelAlerts);
+        }
       }
 
       // Fetch summary
       const summaryRes = await fetch('/api/intel/summary');
-      const summaryData = await summaryRes.json();
-      if (summaryData.success) {
-        setSummary(summaryData.data);
+      if (summaryRes.ok) {
+        const summaryData = await summaryRes.json();
+        if (summaryData.success) {
+          setSummary(summaryData.data);
+        }
       }
     } catch (err) {
       console.error('Error fetching intel data:', err);

@@ -98,6 +98,10 @@ export function useGeofences(options: UseGeofencesOptions = {}): UseGeofencesRet
       body: JSON.stringify(input),
     });
 
+    if (!response.ok) {
+      throw new Error(`Failed to create geofence: ${response.status}`);
+    }
+
     const result = await response.json();
 
     if (!result.success) {
@@ -115,6 +119,10 @@ export function useGeofences(options: UseGeofencesOptions = {}): UseGeofencesRet
       body: JSON.stringify(input),
     });
 
+    if (!response.ok) {
+      throw new Error(`Failed to update geofence: ${response.status}`);
+    }
+
     const result = await response.json();
 
     if (!result.success) {
@@ -129,6 +137,10 @@ export function useGeofences(options: UseGeofencesOptions = {}): UseGeofencesRet
     const response = await fetch(`/api/geofences/${id}`, {
       method: 'DELETE',
     });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete geofence: ${response.status}`);
+    }
 
     const result = await response.json();
 
@@ -146,6 +158,10 @@ export function useGeofences(options: UseGeofencesOptions = {}): UseGeofencesRet
       body: JSON.stringify({ action: 'mark_read', alertId }),
     });
 
+    if (!response.ok) {
+      throw new Error(`Failed to mark alert as read: ${response.status}`);
+    }
+
     const result = await response.json();
 
     if (!result.success) {
@@ -162,6 +178,10 @@ export function useGeofences(options: UseGeofencesOptions = {}): UseGeofencesRet
       body: JSON.stringify({ action: 'mark_all_read' }),
     });
 
+    if (!response.ok) {
+      throw new Error(`Failed to mark all alerts as read: ${response.status}`);
+    }
+
     const result = await response.json();
 
     if (!result.success) {
@@ -177,6 +197,10 @@ export function useGeofences(options: UseGeofencesOptions = {}): UseGeofencesRet
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'dismiss', alertId }),
     });
+
+    if (!response.ok) {
+      throw new Error(`Failed to dismiss alert: ${response.status}`);
+    }
 
     const result = await response.json();
 
@@ -305,6 +329,10 @@ export function useGeofence(id: string | null, options: UseGeofenceOptions = {})
       body: JSON.stringify(input),
     });
 
+    if (!response.ok) {
+      throw new Error(`Failed to update geofence: ${response.status}`);
+    }
+
     const result = await response.json();
 
     if (!result.success) {
@@ -320,6 +348,10 @@ export function useGeofence(id: string | null, options: UseGeofenceOptions = {})
     const response = await fetch(`/api/geofences/${id}`, {
       method: 'DELETE',
     });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete geofence: ${response.status}`);
+    }
 
     const result = await response.json();
 

@@ -65,6 +65,11 @@ export default function TelegramFeed({ className }: { className?: string }) {
       if (search) params.set('search', search);
 
       const response = await fetch(`/api/intel/telegram?${params}`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch messages: ${response.status}`);
+      }
+
       const data = await response.json();
 
       if (data.success) {
@@ -92,6 +97,10 @@ export default function TelegramFeed({ className }: { className?: string }) {
         body: JSON.stringify(newChannel),
       });
 
+      if (!response.ok) {
+        throw new Error(`Failed to add channel: ${response.status}`);
+      }
+
       const data = await response.json();
 
       if (data.success) {
@@ -99,7 +108,7 @@ export default function TelegramFeed({ className }: { className?: string }) {
         setNewChannel({ username: '', displayName: '', category: 'general' });
         fetchMessages();
       } else {
-        alert(data.error || 'Failed to add channel');
+        console.error('Failed to add channel:', data.error);
       }
     } catch (error) {
       console.error('Error adding channel:', error);

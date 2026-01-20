@@ -167,7 +167,8 @@ export class ProximityAnalyzer {
   }
 
   /**
-   * Predict closest approach point
+   * Predict closest approach point using proper vector math
+   * CPA calculation: time_cpa = -(pos · vel) / |vel|², cpa_dist = |pos + vel * t_cpa|
    */
   private predictClosestApproach(
     input: ProximityAnalysisInput,
@@ -184,7 +185,13 @@ export class ProximityAnalyzer {
       input.lon_2
     );
 
-    if (closureAnalysis.closureRate <= 0) {
+    // If missing velocity data, return current distance as best estimate
+    if (
+      input.heading_1 === null ||
+      input.speed_1 === null ||
+      input.heading_2 === null ||
+      input.speed_2 === null
+    ) {
       return {
         distance: currentDistance,
         time: null,
@@ -192,10 +199,53 @@ export class ProximityAnalyzer {
       };
     }
 
-    // Time to closest approach (simple linear approximation)
-    // This is a simplification - real CPA calculation would use full 3D vectors
-    const timeToClosest = currentDistance / closureAnalysis.closureRate; // hours
-    const timeMinutes = timeToClosest * 60;
+    // Convert headings to radians
+    const rad1 = (input.heading_1 * Math.PI) / 180;
+    const rad2 = (input.heading_2 * Math.PI) / 180;
+
+    // Velocity components (knots) - using local tangent plane approximation
+    // x = East, y = North
+    const vx1 = input.speed_1 * Math.sin(rad1);
+    const vy1 = input.speed_1 * Math.cos(rad1);
+    const vx2 = input.speed_2 * Math.sin(rad2);
+    const vy2 = input.speed_2 * Math.cos(rad2);
+
+    // Relative velocity (aircraft 1 relative to aircraft 2)
+    const relVx = vx1 - vx2;
+    const relVy = vy1 - vy2;
+    const relSpeedSq = relVx * relVx + relVy * relVy;
+
+    // If relative speed is negligible, aircraft maintain current distance
+    if (relSpeedSq < 1) {
+      return {
+        distance: currentDistance,
+        time: null,
+        timeMinutes: null,
+      };
+    }
+
+    // Position of aircraft 1 relative to aircraft 2 in nm
+    // Convert lat/lon difference to local tangent plane coordinates
+    const avgLat = (input.lat_1 + input.lat_2) / 2;
+    const cosLat = Math.cos((avgLat * Math.PI) / 180);
+    const dx = (input.lon_1 - input.lon_2) * 60 * cosLat; // nm (approx 60nm per degree longitude at equator)
+    const dy = (input.lat_1 - input.lat_2) * 60; // nm (approx 60nm per degree latitude)
+
+    // Time to CPA: t = -(pos · vel) / |vel|²
+    // Positive t means CPA is in the future
+    const dotProduct = dx * relVx + dy * relVy;
+    const timeToCpaHours = -dotProduct / relSpeedSq;
+
+    // If CPA is in the past or too far in the future, use current distance
+    if (timeToCpaHours < 0) {
+      return {
+        distance: currentDistance,
+        time: null,
+        timeMinutes: null,
+      };
+    }
+
+    const timeMinutes = timeToCpaHours * 60;
 
     // Cap at look-ahead time
     if (timeMinutes > CONFIG.lookAheadMinutes) {
@@ -206,28 +256,16 @@ export class ProximityAnalyzer {
       };
     }
 
-    // Calculate predicted closest distance
-    // Account for the fact that aircraft won't exactly meet (different headings)
-    // Miss distance depends on relative heading
-    const missAngle = (closureAnalysis.relativeHeading * Math.PI) / 180;
-    const perpComponent =
-      currentDistance * Math.sin(missAngle / 2);
-    const parallelComponent = closureAnalysis.closureRate * timeToClosest;
-
-    // Closest approach distance (simplified)
-    const closestDistance = Math.max(
-      0,
-      Math.sqrt(
-        Math.pow(perpComponent, 2) +
-        Math.pow(Math.max(0, currentDistance - parallelComponent), 2)
-      ) - 0.5 // Uncertainty buffer
-    );
+    // Calculate CPA distance: |pos + vel * t_cpa|
+    const cpaDx = dx + relVx * timeToCpaHours;
+    const cpaDy = dy + relVy * timeToCpaHours;
+    const cpaDistance = Math.sqrt(cpaDx * cpaDx + cpaDy * cpaDy);
 
     const closestTime = new Date();
     closestTime.setMinutes(closestTime.getMinutes() + timeMinutes);
 
     return {
-      distance: closestDistance,
+      distance: cpaDistance,
       time: closestTime.toISOString(),
       timeMinutes,
     };
