@@ -155,6 +155,9 @@ class MultiSourceADSBService {
         for (const ac of aircraft) {
           if (!ac.hex) continue;
 
+          // Normalize position: use lastPosition if top-level lat/lon is null
+          this.normalizePosition(ac);
+
           const existing = allAircraft.get(ac.hex.toUpperCase());
 
           // Merge or add aircraft
@@ -334,6 +337,28 @@ class MultiSourceADSBService {
   }
 
   /**
+   * Normalize aircraft position data
+   * Some APIs return lat/lon as null but include position in lastPosition object
+   * This extracts the position from lastPosition when needed
+   */
+  private normalizePosition(ac: ADSBAircraft): void {
+    const acAny = ac as unknown as Record<string, unknown>;
+    const lastPos = acAny.lastPosition as { lat?: number; lon?: number; seen_pos?: number } | undefined;
+
+    // If top-level lat/lon is null/undefined but lastPosition exists, use it
+    if ((ac.lat == null || ac.lon == null) && lastPos) {
+      if (lastPos.lat != null && lastPos.lon != null) {
+        ac.lat = lastPos.lat;
+        ac.lon = lastPos.lon;
+        // Also track how stale the position is
+        if (lastPos.seen_pos != null) {
+          ac.seen_pos = lastPos.seen_pos;
+        }
+      }
+    }
+  }
+
+  /**
    * Validate and detect military aircraft
    * - Detects military aircraft that weren't flagged
    * - Also removes false positives (civilian aircraft incorrectly flagged as military)
@@ -369,8 +394,8 @@ class MultiSourceADSBService {
         return false;
       }
 
-      // Must have position
-      if (aircraft.lat === undefined || aircraft.lon === undefined) {
+      // Must have valid position (check for both null and undefined)
+      if (aircraft.lat == null || aircraft.lon == null) {
         return false;
       }
 

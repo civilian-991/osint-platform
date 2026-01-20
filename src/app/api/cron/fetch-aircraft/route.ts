@@ -64,7 +64,8 @@ export async function GET(request: NextRequest) {
   try {
     // Fetch military aircraft from multiple sources
     const aircraft = await multiSourceADSB.fetchMiddleEastMilitary();
-    const withPositions = aircraft.filter(ac => ac.lat !== undefined && ac.lon !== undefined);
+    // Filter for valid positions (check both null and undefined)
+    const withPositions = aircraft.filter(ac => ac.lat != null && ac.lon != null);
     const sources = multiSourceADSB.getSourceStats().map(s => s.name).join(', ');
 
     console.log(`Fetched ${aircraft.length} military aircraft from [${sources}], ${withPositions.length} with positions`);
