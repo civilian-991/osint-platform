@@ -32,6 +32,7 @@ export default function DashboardLayout({
   };
 
   const navItems = [
+    { href: '/radar', icon: Radio, label: 'OSINT Radar' },
     { href: '/map', icon: Map, label: 'Live Map' },
     { href: '/aircraft', icon: Plane, label: 'Aircraft' },
     { href: '/news', icon: Newspaper, label: 'Intel Feed' },
