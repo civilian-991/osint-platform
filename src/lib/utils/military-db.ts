@@ -700,10 +700,10 @@ export function detectMilitary(aircraft: ADSBAircraft): {
     };
   }
 
-  // Check ICAO hex range - but ONLY for USA military range (most reliable)
+  // Check ICAO hex range - USA and Israel have dedicated military ranges
   // Other countries mix civilian and military in the same hex allocations
   const hexCheck = isHexMilitary(aircraft.hex);
-  if (hexCheck.isMilitary && hexCheck.country === 'USA') {
+  if (hexCheck.isMilitary && (hexCheck.country === 'USA' || hexCheck.country === 'Israel')) {
     return {
       isMilitary: true,
       category: category || 'other',
